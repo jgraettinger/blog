@@ -1,0 +1,34 @@
+version: "3"
+
+services:
+  flow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+    # Don't shut down after the process ends.
+    command: sleep infinity
+    # Wrap in an init process that reaps defunct child processes.
+    # TODO(johnny): This isn't supported on CodeSpaces (yet).
+    #init: true
+
+    # Github Codespaces currently forces "host" network mode:
+    # https://github.community/t/cant-connect-to-postgres/142655
+    network_mode: host
+
+  db:
+    image: postgres:latest
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: flow
+
+    # Github Codespaces currently forces "host" network mode:
+    # https://github.community/t/cant-connect-to-postgres/142655
+    network_mode: host
+
+volumes:
+  postgres-data: {}
