@@ -1,0 +1,49 @@
+$schema: https://json-schema.org/draft/2019-09/schema
+
+$defs:
+  roomState:
+    type: object
+    description: |
+      Intermediate state of a room, used to update the userDetails view.
+      This state maintains:
+       - A mapping of message IDs of the room indexed with their current timestamps.
+       - Users subscriptions to the room, indexed on user ID and with last-seen timestamps.
+
+    properties:
+      messages:
+        type: object
+        additionalProperties:
+          type: integer
+        reduce: { strategy: merge }
+
+      subscribers:
+        type: array
+        items:
+          type: object
+          properties:
+            userId: { type: string }
+            seenTimestamp: { type: integer }
+            delete: { type: boolean }
+          required: [userId, seenTimestamp]
+
+          # Use an anchor for this sub-schema so that we can directly name
+          # it within our TypeScript lambda.
+          $anchor: RoomSubscriber
+
+        reduce:
+          strategy: merge
+          key: [/userId]
+
+    reduce: { strategy: merge }
+    required: [subscribers, messages]
+
+type: object
+properties:
+  id: { type: string, examples: ["liron-shapira"] }
+  name: { type: string, examples: ["Liron S. Shapira"] }
+  numUnreadRooms:
+    type: integer
+    examples: [2]
+    reduce: { strategy: sum }
+required: [id]
+reduce: { strategy: merge }

@@ -1,0 +1,126 @@
+import:
+  - inputs.flow.yaml
+
+collections:
+  userDetails:
+    key: [/id]
+    schema: userDetails.schema.yaml
+
+    derivation:
+      register:
+        schema: userDetails.schema.yaml#/$defs/roomState
+        # At room initializes with no subscribers or messages.
+        initial: { subscribers: [], messages: {} }
+
+      transform:
+        fromMessages:
+          source: { name: messages }
+          shuffle:
+            key: [/roomId]
+          update: { lambda: typescript }
+          publish: { lambda: typescript }
+
+        fromRoomUsers:
+          source: { name: roomUsers }
+          shuffle:
+            key: [/roomId]
+          update: { lambda: typescript }
+          publish: { lambda: typescript }
+
+        fromProfiles:
+          source: { name: profiles }
+          publish: { lambda: typescript }
+
+npmDependencies:
+  lodash: ^4.17
+  "@types/lodash": ^4.14
+
+materializations:
+  - endpoint:
+      name: demo/database
+      config: { table: user_details }
+    source: { name: userDetails }
+
+tests:
+  "foo the bar":
+    - ingest:
+        collection: messages
+        documents:
+          - {
+              "id": "m94",
+              "roomId": "r31",
+              "senderId": "sasha-rosse",
+              "timestamp": 1483,
+              "content": "Perfect!",
+            }
+          - {
+              "id": "m75",
+              "roomId": "r20",
+              "senderId": "mac-tyler",
+              "timestamp": 1359,
+              "content": "I have a great idea...",
+            }
+          - {
+              "id": "m87",
+              "roomId": "r20",
+              "senderId": "mac-tyler",
+              "timestamp": 1372,
+              "content": "Let's go see Giraffage tonight!",
+            }
+    - ingest:
+        collection: roomUsers
+        documents:
+          - {
+              "roomId": "r31",
+              "userId": "liron-shapira",
+              "seenTimestamp": 1310,
+            }
+          - {
+              "roomId": "r20",
+              "userId": "liron-shapira",
+              "seenTimestamp": 1308,
+            }
+
+    - ingest:
+        collection: profiles
+        documents:
+          - { id: "liron-shapira", name: "Liron S. Shapira" }
+
+    - verify:
+        collection: userDetails
+        documents:
+          - {
+              "id": "liron-shapira",
+              "numUnreadRooms": 2,
+              "name": "Liron S. Shapira",
+            }
+
+    - ingest:
+        collection: roomUsers
+        documents:
+          - {
+              "roomId": "r31",
+              "userId": "liron-shapira",
+              "seenTimestamp": 1484,
+            }
+
+    - verify:
+        collection: userDetails
+        documents:
+          - { "id": "liron-shapira", "numUnreadRooms": 1 }
+
+    - ingest:
+        collection: messages
+        documents:
+          - {
+              "id": "m94",
+              "roomId": "r31",
+              "senderId": "sasha-rosse",
+              "timestamp": 1485,
+              "content": "Perfect! (resend)",
+            }
+
+    - verify:
+        collection: userDetails
+        documents:
+          - { "id": "liron-shapira", "numUnreadRooms": 2 }

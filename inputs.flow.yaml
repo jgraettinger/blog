@@ -1,0 +1,21 @@
+collections:
+  messages:
+    key: [/id]
+    schema: inputs.schema.yaml#/$defs/message
+
+  roomUsers:
+    key: [/roomId, /userId]
+    schema: inputs.schema.yaml#/$defs/roomUser
+
+  profiles:
+    key: [/id]
+    schema: inputs.schema.yaml#/$defs/profile
+
+endpoints:
+  demo/database:
+    postgres:
+      host: localhost
+      port: 5432
+      user: flow
+      password: flow
+      dbname: flow

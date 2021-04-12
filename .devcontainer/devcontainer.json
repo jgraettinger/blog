@@ -34,7 +34,7 @@
 				"*.flow.yaml"
 			]
 		},
-		"python.pythonPath": "/usr/bin/python3"
+		"editor.formatOnSave": true,
 	},
 	// IDs of extensions to install when the container is created.
 	"extensions": [

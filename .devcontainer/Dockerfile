@@ -1,4 +1,4 @@
-FROM quay.io/estuary/flow:dev
+FROM quay.io/estuary/flow:v0.1.0-296-g25beddf-dirty
 
 # Switch to the root user to install packages and setup sudo access
 USER root

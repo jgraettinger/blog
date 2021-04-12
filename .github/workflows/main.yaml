@@ -8,4 +8,4 @@ jobs:
       - name: "Test"
         uses: ./.github/actions/flowctl
         with:
-          source: hello-world.flow.yaml
+          source: userDetails.flow.yaml
