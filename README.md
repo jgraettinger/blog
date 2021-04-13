@@ -211,6 +211,18 @@ $ psql -h localhost -c 'SELECT id, numUnreadRooms FROM user_details;' --tuples-o
  liron-shapira |              0
 ```
 
+Flow offers built-in
+[testing](https://docs.estuary.dev/concepts/catalog-entities/tests).
+We can run a test suite to exercise the remaining cases:
+**TODO update with more cases**
+```console
+$ flowctl test --source userDetails.flow.yaml 
+Running  1  tests...
+✔️ userDetails.flow.yaml :: Expect that something something
+
+Ran 1 tests, 1 passed, 0 failed
+```
+
 ## An Implementation Sketch
 
 Suppose that, for each room, we maintained a "RoomState" data structure that modeled:
@@ -302,12 +314,13 @@ and to then execute those workflows continuously, at any scale, as quickly as po
 A repeated Flow theme is that internal details in traditional database architectures become
 first-class citizens within Flow.
 This is of a piece with Flow's broader vision of
-[un-bundling the database](https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/) -- without forsaking the properties that make databases desirable in the first place!
+[un-bundling the database](https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/)
+ -- without forsaking the properties that make databases desirable in the first place!
 
 Internal states are no exception.
 Within Flow, these are
 [registers](https://docs.estuary.dev/concepts/catalog-entities/derivations#registers):
-keyed documents which derivations use to maintain states like RoomState.
+keyed documents that derivations use to maintain states like RoomState.
 Registers enable the full gamut of stateful workflows, including joins and aggregations.
 They're fast, durable, and are not beholden to the windowing constraints and limitations
 that plague other streaming workflow engines.
@@ -320,11 +333,12 @@ of your JSON schemas tell Flow how two document instances should be combined or 
 In fact of **(A-E)** above, only **(B)** requires any code: We must provide Flow with
 pure function "mappers" that turn documents into other kinds of documents.
 Today Flow requires that these mappers be provided as strongly-typed TypeScript,
-or as a remote JSON => JSON HTTP lambda. In the future we'll add support for WebAssembly.
+or as a remote JSON HTTP lambda. In the future we'll add support for WebAssembly.
 
 ---
 
-Putting it all together we can implement the workflow with a single derived collection: 
+Putting it all together we can implement the workflow with a single derived collection and
+schema **TODO link**: 
 ```yaml
 collections:
   userDetails:
@@ -351,55 +365,18 @@ collections:
           publish: { lambda: typescript }
 ```
 
-And a RoomState schema:
-```yaml
-type: object
-properties:
-  messages:
-    type: object
-    additionalProperties: { type: integer }
-    # Merge by property.
-    reduce: { strategy: merge }
+The derivation shuffles each Message or RoomUser to a corresponding
+RoomState register on `/roomId`.
 
-  subscribers:
-    type: array
-    items:
-      type: object
-      properties:
-        userId: { type: string }
-        seenTimestamp: { type: integer }
-        delete: { type: boolean }
-      required: [userId, seenTimestamp]
-    reduce:
-      # Merge as a unique array sorted on /userId.
-      strategy: merge
-      key: [/userId]
-
-reduce: { strategy: merge }
-```
-
-And a UserDetails schema:
-```yaml
-type: object
-properties:
-  id: { type: string }
-  numUnreadRooms:
-    type: integer
-    reduce: { strategy: sum }
-required: [id]
-reduce: { strategy: merge }
-```
-
-The derivation shuffles each Message or RoomUser to a corresponding RoomState register on `/roomId`.
 It calls the "update" TypeScript lambda **TODO insert link** to map source documents
-into a RoomState, which are then reduced into the prior RoomState.
+into a RoomState, which are then reduced into the current register value.
+
 These *before* and *after* RoomStates are then presented to the "publish" lambda,
 which inspects them to identify users who have toggled between rooms,
-and in turn publishes `userDetails` documents like `{"id":"johnny","numUnseenRooms":"+1"}`.
+and in turn publishes `userDetails` documents like `{"id":"johnny","numUnseenRooms":"-1"}`.
 
-
-Finally, `userDetails` is materialized to a PostgreSQL table.
-It's `reduce: { strategy: sum }` annotation causes it to be summed in a continuous running tally:
+Finally, `userDetails` is materialized to a PostgreSQL table
+where `numUnreadRooms` is reduced in a continuous running tally:
 ```yaml
 materializations:
   - endpoint:
@@ -408,18 +385,62 @@ materializations:
     source: { name: userDetails }
 ```
 
-## Evolving a Derivation
+## How this Helps
+
+What we've achieved with Flow is a de-normalized view, in our database of choice,
+that's reactive to our normalized business events -- past and future.
+It's consolidated into a single place, strongly-typed, tested,
+and completely isolated from our application code.
+Flow will manage its execution for us and we don't have yet another app to deploy.
+
+The solution isn't *completely* declarative -- we still have a non-trivial
+function to identify users which changed between "seen" vs "not seen" room states --
+but we've substantially simplified from the spaghetti of per-event application handlers.
+
+## On Query Planners
+
+It's not entirely lost on me that Liron asked for easy de-normalized views
+and I've offered up a moderately complex continuous map/reduce workflow.
+
+Why not, for example, apply a query planner that turns a higher-level
+language like SQL into an *internal implementation* using something
+like derivations and registers?
+
+The short answer is that a query-planner **first** approach appears
+incompatible with Flow's broader objectives:
+composable, straightforward
+and succinct expressions of complex and long-lived workflows,
+which are production-ready and integrated into the places you need them.
+
+For example:
+
+  * The details of the query plan (e.x. derivations and registers) *really* matter,
+    particularly for long-lived workflows run at scale.
+    It's unavoidable that owners understand their operational aspects,
+    and planners often get in the way of an engineer who knows what they want.
+
+  * Workflows must evolve over time -- joining to a new data set,
+    enriching with extra fields, or fixing a bug -- without being forced to
+    recompute from scratch ($$$). Derivations allow for such changes today,
+    but it's unclear how a planner could.
+
+  * One team's output is often another team's input, and
+    derivations may be re-used in many data products.
+    Optimizing the overall structure of the execution graph is often
+    more important than the plan of a single query.
+
+  * Flow derivations allow for general computation:
+    TypeScript, remote lambdas, and (in the future) WebAssembly.
+    It's unclear how that flexibility would be incorporated into plans.
+
+In truth this stuff is *hard* and trade-offs abound.
+Flow threads the needle today by exposing its fundamental operations as first-class primitives,
+with the hope and expectation that, in the future, one or more query planners could be
+layered on top to *generate* execution graphs in terms of these
+primitives -- an area we'll explore going forward.
+
+## Addendum: Evolving UserDetails
 
 TODO: this section would show how the running `userDetails` derivation
 can be enriched by joining in real user names, without having to rebuild
 from scratch.
-
-## Holy Write-Amplification Batman
-
-TODO: this section would discuss the write amplification issue of `userDetails`, and demonstrate materializing two views which are queried at read time:
- * Latest message of each room.
- * User's set of subscribed rooms w/ each `seenTimestamp`.
-
-Objective is to demonstrate flexibility in standing up new kinds of derivations
-that run side-by-side with existing workflows.
-*Probably this is too much and should be cut*.
