@@ -1,5 +1,3 @@
-(This repo is being developed for a work-in-progress blog post:)
-
 # Filling a Paradigm-Shaped Hole
 
 👋 Hi, I'm Johnny, I work at [Estuary](https://estuary.dev) on our product
@@ -401,6 +399,19 @@ collections:
           shuffle: { key: [/roomId] }
           update: { lambda: typescript }
           publish: { lambda: typescript }
+```
+
+
+```sequence {theme="hand"}
+Collections->Runtime: Read Message:\n{Message r20}
+Runtime->Lambda: update({Message}) ?
+Note over Lambda: Runs User Functions...
+Note over Runtime: Loads register r20
+Lambda->Runtime: {RoomState} update
+Note over Runtime: Reduce {RoomState}\nupdate into register
+Runtime->Lambda: publish(before, after: {RoomStates}) ?
+Lambda->Runtime: {id:johnny, numRooms:-1}
+Runtime->Collections: Commit UserDetails:\n{id:johnny, numRooms:-1}
 ```
 
   1) The derivation shuffles each Message or RoomUser to a corresponding
