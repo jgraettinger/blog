@@ -291,6 +291,7 @@ Now all we have to do is keep a running sum for each user somewhere... how about
 
 ## This is Just Map/Reduce
 
+The paradigm, that is, not MapReduce™.
 This formulation is one of many possible.
 Arguably it's not even a very good one,
 but I'll leave improvements as an exercise for you.
@@ -354,13 +355,16 @@ They're fast, durable,
 and avoid the windowing and scaling limitations
 that plague other stateful stream architectures.
 
-Writing reducers can be verbose and error-prone, so with Flow **you don't write them**.
+Writing reducers can be verbose and error-prone,
+so with Flow **you don't write them**.
 Instead you annotate JSON schemas with
 [`reduce` annotations](https://docs.estuary.dev/reference/catalog-reference/schemas-and-data-reductions#reductions)
 that tell Flow how to combine documents having the same key.
 This is another inversion from a database:
 SQL functions like `SUM` imply reduction under the hood,
-but Flow hoists reduction to a top-level schema concern.
+but Flow hoists reduction to a top-level schema concern
+— a subtle superpower that's leveraged to reduce data volumes
+and enhance performance at _every stage of processing_.
 
 In fact, of **(A-E)** above only **(B)** and **(D)** require any code:
 You provide Flow with pure functions that map documents into other
