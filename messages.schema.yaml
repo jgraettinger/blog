@@ -1,0 +1,11 @@
+$schema: https://json-schema.org/draft/2019-09/schema
+
+type: object
+properties:
+  id: { type: string, examples: ["m94"] }
+  roomId: { type: string, examples: ["r31"] }
+  senderId: { type: string, examples: ["sasha-rosse"] }
+  timestamp: { type: integer, examples: [1483] }
+  content: { type: string, examples: ["Perfect!"] }
+  delete: { type: boolean }
+required: [id, roomId, senderId, timestamp]

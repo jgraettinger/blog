@@ -3,15 +3,6 @@ import * as _ from 'lodash';
 
 // Implementation for derivation userDetails.flow.yaml#/collections/userDetails/derivation.
 export class UserDetails implements interfaces.UserDetails {
-    // Enrich with user's profile.
-    fromProfilesPublish(
-        source: collections.Profiles,
-        _register: registers.UserDetails,
-        _previous: registers.UserDetails,
-    ): collections.UserDetails[] {
-        return [source];
-    }
-
     // Add or update this {message: timestamp} in the room-state register.
     fromMessagesUpdate(source: collections.Messages): registers.UserDetails[] {
         return [
@@ -79,18 +70,15 @@ function toggleUnread(previous: registers.UserDetails, next: registers.UserDetai
     const merge = (l: anchors.RoomSubscriber | undefined, r: anchors.RoomSubscriber | undefined) => {
         // If the left or right subscription doesn't exist, then the room is implicitly "seen".
         const wasSeen = !l || l.seenTimestamp >= prevTime,
-            isSeen = !r || r.seenTimestamp >= nextTime;
+            isSeen = !r || r.seenTimestamp >= nextTime,
+            id = l?.userId ?? r?.userId ?? '';
 
         if (wasSeen && !isSeen) {
-            out.push({
-                id: r?.userId ?? '',
-                numUnreadRooms: 1,
-            });
+            out.push({ id: id, numUnreadRooms: 1 });
         } else if (!wasSeen && isSeen) {
-            out.push({
-                id: l?.userId ?? '',
-                numUnreadRooms: -1,
-            });
+            out.push({ id: id, numUnreadRooms: -1 });
+        } else if (!l) {
+            out.push({ id: id, numUnreadRooms: 0 });
         }
     };
 
@@ -98,6 +86,7 @@ function toggleUnread(previous: registers.UserDetails, next: registers.UserDetai
         l = previous.subscribers,
         r = next.subscribers;
 
+    // TODO(johnny): There's probably a nice library for this ?
     while (l.length && r.length) {
         if (l[0].userId < r[0].userId) {
             merge(l.shift(), undefined);

@@ -78,11 +78,11 @@ for Messages and RoomUsers:
 collections:
   messages:
     key: [/id]
-    schema: inputs.schema.yaml#/$defs/message
+    schema: messages.schema.yaml
 
   roomUsers:
     key: [/roomId, /userId]
-    schema: inputs.schema.yaml#/$defs/roomUser
+    schema: roomUsers.schema.yaml
 ```
 
 Our desired view is implemented as a
@@ -90,7 +90,7 @@ Our desired view is implemented as a
 We'll look at it a bit later.
 First start a local development instance of Flow:
 ```console
-$ flowctl develop --source userDetails.flow.yaml
+$ flowctl develop --source userDetailsView.flow.yaml
 ```
 
 Then ingest the examples from Liron's post.
@@ -170,8 +170,7 @@ Liron has seen all of room `r31`,
 but `r20` has one remaining message:
 
 ```console
-$ cat scripts/write-events-2.sh 
-curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:8080/ingest <<EOF
+$ curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:8080/ingest <<EOF
 {
     "roomUsers": [
         {
@@ -187,7 +186,10 @@ curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:8080
     ]
 }
 EOF
+```
 
+The view updates as we'd expect:
+```console
 $ psql -h localhost -c 'SELECT id, numUnreadRooms FROM user_details;' --tuples-only
  liron-shapira |              1
 ```
@@ -199,13 +201,17 @@ I'll point out that Flow offers built-in
 [testing](https://docs.estuary.dev/concepts/catalog-entities/tests)
 and you can run a suite to exercise them:
 
-**TODO update with more cases**
 ```console
-$ flowctl test --source userDetails.flow.yaml 
-Running  1  tests...
-✔️ userDetails.flow.yaml :: Expect that something something
+$ flowctl test --source userDetailsView.flow.yaml 
+Running  6  tests...
+✔️ userDetails.flow.yaml :: Deleting only unread messages decrements unread rooms
+✔️ userDetails.flow.yaml :: Deleting rooms with read and unread messages
+✔️ userDetails.flow.yaml :: Liron's example has two unread rooms
+✔️ userDetails.flow.yaml :: New messages increment only fully-read rooms
+✔️ userDetails.flow.yaml :: Updating message timestamp can update unread rooms
+✔️ userDetails.flow.yaml :: Viewing rooms decrements unread rooms
 
-Ran 1 tests, 1 passed, 0 failed
+Ran 6 tests, 6 passed, 0 failed
 ```
 
 ## An Implementation Sketch

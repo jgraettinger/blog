@@ -40,7 +40,6 @@ $defs:
 type: object
 properties:
   id: { type: string, examples: ["liron-shapira"] }
-  name: { type: string, examples: ["Liron S. Shapira"] }
   numUnreadRooms:
     type: integer
     examples: [2]

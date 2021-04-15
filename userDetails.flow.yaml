@@ -27,25 +27,15 @@ collections:
           update: { lambda: typescript }
           publish: { lambda: typescript }
 
-        fromProfiles:
-          source: { name: profiles }
-          publish: { lambda: typescript }
-
 npmDependencies:
   lodash: ^4.17
   "@types/lodash": ^4.14
 
-materializations:
-  - endpoint:
-      name: demo/database
-      config: { table: user_details }
-    source: { name: userDetails }
-
 tests:
-  "foo the bar":
+  "Liron's example has two unread rooms":
     - ingest:
         collection: messages
-        documents:
+        documents: &messages
           - {
               "id": "m94",
               "roomId": "r31",
@@ -69,7 +59,7 @@ tests:
             }
     - ingest:
         collection: roomUsers
-        documents:
+        documents: &userUnread
           - {
               "roomId": "r31",
               "userId": "liron-shapira",
@@ -80,47 +70,135 @@ tests:
               "userId": "liron-shapira",
               "seenTimestamp": 1308,
             }
-
-    - ingest:
-        collection: profiles
-        documents:
-          - { id: "liron-shapira", name: "Liron S. Shapira" }
-
     - verify:
         collection: userDetails
         documents:
-          - {
-              "id": "liron-shapira",
-              "numUnreadRooms": 2,
-              "name": "Liron S. Shapira",
-            }
+          - id: "liron-shapira"
+            numUnreadRooms: 2
 
+  "Viewing rooms decrements unread rooms":
+    - ingest:
+        collection: messages
+        documents: *messages
     - ingest:
         collection: roomUsers
-        documents:
-          - {
-              "roomId": "r31",
-              "userId": "liron-shapira",
-              "seenTimestamp": 1484,
-            }
-
+        documents: &userPartial
+          - roomId: r31
+            userId: liron-shapira
+            seenTimestamp: 1500
+          - roomId: r20
+            userId: liron-shapira
+            seenTimestamp: 1365 # View first, but not second message.
     - verify:
         collection: userDetails
-        documents:
-          - { "id": "liron-shapira", "numUnreadRooms": 1 }
+        documents: [numUnreadRooms: 1]
 
+  "New messages increment only fully-read rooms":
+    - ingest:
+        collection: messages
+        documents: *messages
+    - ingest:
+        collection: roomUsers
+        documents: *userPartial
     - ingest:
         collection: messages
         documents:
-          - {
-              "id": "m94",
-              "roomId": "r31",
-              "senderId": "sasha-rosse",
-              "timestamp": 1485,
-              "content": "Perfect! (resend)",
-            }
+          - id: m100
+            roomId: r31
+            senderId: sasha-rosse
+            timestamp: 1510
+            content: "Message!"
+          # r20 was already not seen, so this doesn't increment.
+          - id: m101
+            roomId: r20
+            senderId: mac-tyler
+            timestamp: 1510
+            content: "Message!"
+    - verify:
+        collection: userDetails
+        documents: [numUnreadRooms: 2]
+
+  "Deleting rooms with read and unread messages":
+    - ingest:
+        collection: messages
+        documents: *messages
+    - ingest:
+        collection: roomUsers
+        documents: *userPartial
+    # Delete both room subscriptions.
+    - ingest:
+        collection: roomUsers
+        documents:
+          - roomId: r20
+            userId: liron-shapira
+            seenTimestamp: 0
+            delete: true
+          - roomId: r31
+            userId: liron-shapira
+            seenTimestamp: 0
+            delete: true
+    - verify:
+        collection: userDetails
+        documents: [numUnreadRooms: 0]
+
+  "Deleting only unread messages decrements unread rooms":
+    - ingest:
+        collection: messages
+        documents: *messages
+    - ingest:
+        collection: roomUsers
+        documents: *userPartial
+    # Delete read & unread messages.
+    - ingest:
+        collection: messages
+        documents:
+          # This message was unread.
+          - id: m87
+            roomId: r20
+            senderId: mac-tyler
+            timestamp: 1372
+            delete: true
+
+          # And this one was read.
+          - id: m94
+            roomId: r31
+            senderId: sasha-rosse
+            timestamp: 1483
+            delete: true
 
     - verify:
         collection: userDetails
+        documents: [numUnreadRooms: 0]
+
+  "Updating message timestamp can update unread rooms":
+    - ingest:
+        collection: messages
+        documents: *messages
+    - ingest:
+        collection: roomUsers
+        documents: *userPartial
+
+    # Previously unread message is now read.
+    - ingest:
+        collection: messages
         documents:
-          - { "id": "liron-shapira", "numUnreadRooms": 2 }
+          - id: m87
+            roomId: r20
+            senderId: mac-tyler
+            timestamp: 1361
+    - verify:
+        collection: userDetails
+        documents: [numUnreadRooms: 0]
+
+    # Previously read message is now unread.
+    - ingest:
+        collection: messages
+        documents:
+          - id: m94
+            roomId: r31
+            senderId: sasha-rosse
+            timestamp: 1550
+
+    - verify:
+        collection: userDetails
+        documents: [numUnreadRooms: 1]

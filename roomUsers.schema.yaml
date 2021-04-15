@@ -1,0 +1,9 @@
+$schema: https://json-schema.org/draft/2019-09/schema
+
+type: object
+properties:
+  roomId: { type: string, examples: ["r31"] }
+  userId: { type: string, examples: ["liron-shapira"] }
+  seenTimestamp: { type: integer, examples: [1310] }
+  delete: { type: boolean }
+required: [roomId, userId, seenTimestamp]
