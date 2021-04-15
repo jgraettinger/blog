@@ -92,9 +92,7 @@ First start a local development instance of Flow:
 $ flowctl develop --source userDetailsView.flow.yaml
 ```
 
-Then ingest the examples from Liron's post.
-We'll just POST them for now.
-In a production setup we might want to ingest using Change Data Capture (CDC):
+Then ingest the examples from Liron's post:
 
 ```console
 $ curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:8080/ingest <<EOF
