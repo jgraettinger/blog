@@ -37,7 +37,7 @@ It must account for:
  * Message timestamps changing, perhaps due to an edit.
 
 All of these update modes from just two "toy" inputs: Messages and RoomUser subscriptions!
-The trouble is that most databases don't support
+The trouble is that most databases don't
 support incremental materializations,
 and we're _deeply_ out of luck if we want it live elsewhere,
 perhaps in Redis or DynamoDB.
@@ -248,20 +248,21 @@ takes two RoomStates and deeply merges them.
 See what just happened?
 Before we had many code paths - one for each flavor of input -
 that *each* figured out how to incrementally update a RoomState 🤮.
-Now we have trivial functions that just map inputs *into* a RoomState.
+Now we have trivial functions that map their input *into* a RoomState.
 Plus one reducer function that smashes those RoomStates together,
 which frankly sounds kind of hard 🤔.
 At least the pure functions are a piece of cake!
 
 Anyway suppose we compare the *before* and *after* copies of an updated RoomState.
-Hey, this is useful too! Since one RoomState tells us users that have seen the room,
-before vs after RoomStates tell us which users *toggled* between having seen it:
+Hey, this is useful too!
+Since one RoomState tells us users that have seen the room,
+comparing RoomStates tell us which users *toggled* between having seen it:
 
 ```json
 // Compare this RoomState as *after* to the RoomState from before:
 {
   "messages": {
-    // Deleted: "m102": 1532,
+    // "m102": 1532, // Deleted.
     "m94": 1483
   },
   "subscribers": [
