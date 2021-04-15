@@ -28,11 +28,12 @@ He concludes (emphasis mine):
 What we're after today - as posed by Liron - is a materialized view
 which serves up each user's number of unread chat rooms.
 It must account for:
- * Messages being sent by users, and other users viewing them.
- * Messages being deleted without being read by some or all users.
- * Users deleting room subscriptions which may or may not have unread messages.
- * Users *un*-seeing chat rooms by restoring an older `seenTimestamp`.
- * Message timestamps changing, perhaps due to an edit.
+
+- Messages being sent by users, and other users viewing them.
+- Messages being deleted without being read by some or all users.
+- Users deleting room subscriptions which may or may not have unread messages.
+- Users _un_-seeing chat rooms by restoring an older `seenTimestamp`.
+- Message timestamps changing, perhaps due to an edit.
 
 Amazingly, all of these update paths stem from just two "toy" inputs:
 Messages and RoomUser subscriptions!
@@ -59,19 +60,18 @@ Let's see it in action.
 
 ## Demo Time
 
-*This post has
+_This post lives in
 [a Git repository](https://github.com/jgraettinger/filling-paradigm-shaped-hole).
 You can open it in
 [VSCode Remote Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-or 
+or
 [GitHub CodeSpaces](https://github.com/features/codespaces)
-(early access) and run the console commands yourself:*
-
-**TODO Image of codespaces**
+(early access) and run the console commands yourself._
 
 We'll start with basic Flow
 [collections](https://docs.estuary.dev/concepts/catalog-entities/collections)
 for Messages and RoomUsers:
+
 ```yaml
 collections:
   messages:
@@ -87,6 +87,7 @@ Our desired view is implemented as a
 [derived collection](https://docs.estuary.dev/concepts/catalog-entities/derivations).
 We'll look at it a bit later.
 First start a local development instance of Flow:
+
 ```console
 $ flowctl develop --source userDetailsView.flow.yaml
 ```
@@ -94,6 +95,7 @@ $ flowctl develop --source userDetailsView.flow.yaml
 Then ingest the examples from Liron's post.
 We'll just POST them for now.
 In a production setup we might want to ingest using Change Data Capture (CDC):
+
 ```console
 $ curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:8080/ingest <<EOF
 {
@@ -110,7 +112,7 @@ $ curl -f -H 'Content-Type: application/json' -d @/dev/stdin http://localhost:80
             "roomId": "r20",
             "senderId": "mac-tyler",
             "timestamp": 1359,
-            "content": "I have a great idea..."  
+            "content": "I have a great idea..."
         },
         {
             "id": "m87",
@@ -137,9 +139,10 @@ EOF
 ```
 
 As expected user `liron-shapira` now has two unread rooms:
+
 ```console
 $ psql -h localhost -c 'SELECT id, numUnreadRooms FROM user_details;'
-      id       | numunreadrooms 
+      id       | numunreadrooms
 ---------------+----------------
  liron-shapira |              2
 (1 row)
@@ -150,15 +153,16 @@ using a declared
 [materialization](https://docs.estuary.dev/concepts/catalog-entities/materialization)
 and JSON schema.
 It's a regular table and indexed on user ID for efficient lookups:
+
 ```console
 $ psql -h localhost -c '\d user_details;'
                Table "public.user_details"
-     Column     |  Type  | Collation | Nullable | Default 
+     Column     |  Type  | Collation | Nullable | Default
 ----------------+--------+-----------+----------+---------
- id             | text   |           | not null | 
- name           | text   |           |          | 
- numunreadrooms | bigint |           |          | 
- flow_document  | json   |           | not null | 
+ id             | text   |           | not null |
+ name           | text   |           |          |
+ numunreadrooms | bigint |           |          |
+ flow_document  | json   |           | not null |
 Indexes:
     "user_details_pkey" PRIMARY KEY, btree (id)
 ```
@@ -187,20 +191,21 @@ EOF
 ```
 
 The view updates as we'd expect:
+
 ```console
 $ psql -h localhost -c 'SELECT id, numUnreadRooms FROM user_details;' --tuples-only
  liron-shapira |              1
 ```
 
-## Test 
+## Test
 
 Rather than bore you with the remaining cases,
-I'll point out that Flow offers built-in 
+I'll point out that Flow offers built-in
 [testing](https://docs.estuary.dev/concepts/catalog-entities/tests)
 and you can run a suite to exercise them:
 
 ```console
-$ flowctl test --source userDetailsView.flow.yaml 
+$ flowctl test --source userDetailsView.flow.yaml
 Running  6  tests...
 ✔️ userDetails.flow.yaml :: Deleting only unread messages decrements unread rooms
 ✔️ userDetails.flow.yaml :: Deleting rooms with read and unread messages
@@ -218,19 +223,18 @@ Before throwing Flow concepts at you, I want to give a sketch
 for how a view like this can work.
 Suppose we maintain a RoomState data structure for a chat room with:
 
-  * Messages of the room and their associated timestamps.
-  * Subscribers of the room and when they last saw it.
+- Messages of the room and their associated timestamps.
+- Subscribers of the room and when they last saw it.
 
 We'd have something like this:
+
 ```json
 {
   "messages": {
     "m102": 1532,
     "m94": 1483
   },
-  "subscribers": [
-    {"userId":"liron-shapira", "seenTimestamp": 1510}
-  ]
+  "subscribers": [{ "userId": "liron-shapira", "seenTimestamp": 1510 }]
 }
 ```
 
@@ -248,22 +252,22 @@ or because a message changed its timestamp, or was deleted.
 That's easy: we just upsert or remove into `/messages` keyed on the message ID.
 Whenever a RoomUser arrives we mutate `/subscribers` in a similar way.
 
-Let's decouple this a bit further: we'll define a *mapping* from any
-single Message or RoomUser into a RoomState, and a *reducer* which
+Let's decouple this a bit further: we'll define a _mapping_ from any
+single Message or RoomUser into a RoomState, and a _reducer_ which
 takes two RoomStates and deeply merges them.
 
 See what just happened?
 Before we had many code paths - one for each flavor of input -
-that *each* figured out how to incrementally update a RoomState - *ugh!*
-Now we have trivial functions that map their input *into* a RoomState.
+that _each_ figured out how to incrementally update a RoomState - _ugh!_
+Now we have trivial functions that map their input _into_ a RoomState.
 Plus one reducer function that smashes those RoomStates together,
 which frankly sounds kind of hard 🤔.
 At least the pure functions are a piece of cake!
 
-Anyway suppose we compare the *before* and *after* copies of an updated RoomState.
+Anyway suppose we compare the _before_ and _after_ copies of an updated RoomState.
 Hey, this is useful too!
 Since one RoomState tells us users that have seen the room,
-comparing RoomStates tell us which users *toggled* between having seen the room:
+comparing RoomStates tell us which users _toggled_ between having seen the room:
 
 ```json
 // Compare this RoomState as *after* to the RoomState from before:
@@ -273,8 +277,8 @@ comparing RoomStates tell us which users *toggled* between having seen the room:
     "m94": 1483
   },
   "subscribers": [
-    {"userId":"liron-shapira", "seenTimestamp": 1510},
-    {"userId":"johnny", "seenTimestamp": 0} // Added.
+    { "userId": "liron-shapira", "seenTimestamp": 1510 },
+    { "userId": "johnny", "seenTimestamp": 0 } // Added.
   ]
 }
 
@@ -298,36 +302,36 @@ this is what its gooey center looks like — though perhaps a bit
 more inscrutable and less tuneable.
 Databases use internal states like RoomState all the time,
 as an internal result set
-built in service of the result that you *actually* asked for.
+built in service of the result that you _actually_ asked for.
 
 What's salient here is that we've deconstructed the hard question of
 "how should a Message or RoomUser update user's `numUnreadRooms`?"
 into a bunch of simpler questions:
 
-  * **(A)** How should a Message or RoomUser be shuffled to its current RoomState?
-  * **(B)** How do I turn that Message or RoomUser into a RoomState?
-  * **(C)** Given a current RoomState,
-    how do I reduce an update to produce a next state?
-  * **(D)** Given previous and next RoomSates,
-    which users toggled between having seen the room?
-  * **(E)** Given the set of toggles of each user,
-    what's their current `numUnreadRooms`?
+- **(A)** How should a Message or RoomUser be shuffled to its current RoomState?
+- **(B)** How do I turn that Message or RoomUser into a RoomState?
+- **(C)** Given a current RoomState,
+  how do I reduce an update to produce a next state?
+- **(D)** Given previous and next RoomSates,
+  which users toggled between having seen the room?
+- **(E)** Given the set of toggles of each user,
+  what's their current `numUnreadRooms`?
 
 _Lots_ of problems can be tackled by this kind of destructuring
 and the general shapes tend to be really similar:
 
-  * Shuffling a document on an extracted key
-  * Mapping a document into another kind of document
-  * Combining or reducing multiple documents into one
-  * Mapping a document, as well as *before* and *after* internal states, into other documents
-  * Recursively shuffling, mapping, or reducing *those* documents in further, cascaded steps
+- Shuffling a document on an extracted key
+- Mapping a document into another kind of document
+- Combining or reducing multiple documents into one
+- Mapping a document, as well as _before_ and _after_ internal states, into other documents
+- Recursively shuffling, mapping, or reducing _those_ documents in further, cascaded steps
 
 ## Flow As Continuous Map/Reduce
 
 Flow lets you express map/reduce workflows in declarative terms: a
 [catalog](https://docs.estuary.dev/concepts/catalog-entities)
 of YAML definitions and associated pure-function lambdas.
-You *apply* a catalog to the Flow runtime.
+You _apply_ a catalog to the Flow runtime.
 It then executes it continuously, at any scale, driven by your writes,
 with end-to-end "exactly once" semantics.
 
@@ -340,7 +344,7 @@ you'll notice a bit of a theme:
 internal database details are often front-and-center concepts within Flow.
 This is of a piece with Flow's broader vision of
 [un-bundling the database](https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/)
- — without forsaking the properties that make databases desirable in the first place!
+— without forsaking the properties that make databases desirable in the first place!
 
 Internal states are no exception.
 Flow calls these
@@ -373,8 +377,8 @@ In the future we'll add support for WebAssembly and OpenAPI.
 
 Putting it all together, here's a
 derived collection and
-[schema](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.schema.yaml)
-that implements the workflow:
+[schema](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.schema.yaml):
+
 ```yaml
 collections:
   userDetails:
@@ -401,7 +405,11 @@ collections:
           publish: { lambda: typescript }
 ```
 
+And here's the basic workflow that Flow runs:
+![Flow derivation workflow](images/derive-workflow.png)
 
+<!--
+Build with markdown preview enhanced:
 ```sequence {theme="hand"}
 Collections->Runtime: Read Message:\n{Message r20}
 Runtime->Lambda: update({Message}) ?
@@ -413,27 +421,29 @@ Runtime->Lambda: publish(before, after: {RoomStates}) ?
 Lambda->Runtime: {id:johnny, numRooms:-1}
 Runtime->Collections: Commit UserDetails:\n{id:johnny, numRooms:-1}
 ```
+-->
 
-  1) The derivation shuffles each Message or RoomUser to a corresponding
-  RoomState register on `/roomId`.
+1. The derivation shuffles each Message or RoomUser to a corresponding
+   RoomState register on `/roomId`.
 
-  2) It calls an `update`
-  [TypeScript lambda](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.flow.ts)
-  to map the source document into a RoomState.
+2. It calls an `update`
+   [TypeScript lambda](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.flow.ts)
+   to map the source document into a RoomState.
 
-  3) It uses `reduce` schema annotations to fold the update into the current register.
+3. It uses `reduce` schema annotations to fold the update into the current register.
 
-  4) It calls the `publish` lambda with *before* and *after* versions of the RoomState
-    (and also the source document, which we don't need here).
+4. It calls the `publish` lambda with _before_ and _after_ versions of the RoomState
+   (and also the source document, which we don't need here).
 
-  5) The lambda identifies users who have toggled between rooms,
-  and returns documents like `{"id":"johnny","numUnseenRooms":"-1"}`.
+5. The lambda identifies users who have toggled between rooms,
+   and returns documents like `{"id":"johnny","numUnseenRooms":"-1"}`.
 
-  6) Returned documents are checked against the collection schema,
-  they're grouped and combined on user `/id` (the collection key),
-  and they're committed to the collection.
+6. Returned documents are checked against the collection schema,
+   they're grouped and combined on user `/id` (the collection key),
+   and they're committed to the collection.
 
 Finally `userDetails` is materialized to a table:
+
 ```yaml
 materializations:
   - endpoint:
@@ -459,7 +469,7 @@ It's consolidated into a single place, strongly-typed, tested,
 and fully isolated from our application code.
 Flow will manage its execution for us and we don't have yet another app to deploy.
 
-The solution isn't *completely* declarative —
+The solution isn't _completely_ declarative —
 we've still written a non-trivial function to identify
 users that changed between room states —
 but it's a lot simpler than the spaghetti of updates in application handlers.
@@ -475,44 +485,44 @@ It's not entirely lost on me that Liron asked for easy de-normalized views
 and I've offered up a moderately complex continuous map/reduce workflow.
 
 Why not, for example, apply a query planner that turns a higher-level
-language like SQL into an *internal execution plan* using something
+language like SQL into an _internal execution plan_ using something
 like derivations and registers?
 
-The short answer is that a query-planner *first* approach is
+The short answer is that a query-planner _first_ approach is
 incompatible with Flow's broader objectives:
 composable, straightforward
 and succinct expressions of complex and long-lived workflows,
 which are production-ready and integrate into the places you need them.
 For example:
 
-  * The details of a query plan *really* matter,
-    particularly when running at scale for months or years.
-    You have to understand its operational aspects,
-    and planners often get in the way of an engineer who knows what they want.
+- The details of a query plan _really_ matter,
+  particularly when running at scale for months or years.
+  You have to understand its operational aspects,
+  and planners often get in the way of an engineer who knows what they want.
 
-  * You'll need to evolve workflows over time —
-    joining in a new data set,
-    enriching with extra fields, or fixing a bug —
-    and you may not appreciate being forced to
-    recompute from piles of historical data (expensive!)
-    Derivations allow for such changes today, but it's unclear how a planner could.
+- You'll need to evolve workflows over time —
+  joining in a new data set,
+  enriching with extra fields, or fixing a bug —
+  and you may not appreciate being forced to
+  recompute from piles of historical data (expensive!)
+  Derivations allow for such changes today, but it's unclear how a planner could.
 
-  * One team's output is another team's input, and
-    you'll want to re-use derivations in many data products.
-    The structure and overall optimization of the execution graph
-    is more important than the plan of a single query.
+- One team's output is another team's input, and
+  you'll want to re-use derivations in many data products.
+  The structure and overall optimization of the execution graph
+  is more important than the plan of a single query.
 
-  * Flow derivations allow for general computation:
-    TypeScript, remote lambdas, and (in the future) WebAssembly.
-    It's unclear how that flexibility
-    could be incorporated into query plans.
-  
-In truth this stuff is *hard* and trade-offs abound.
+- Flow derivations allow for general computation:
+  TypeScript, remote lambdas, and (in the future) WebAssembly.
+  It's unclear how that flexibility
+  could be incorporated into query plans.
+
+In truth this stuff is _hard_ and trade-offs abound.
 Flow threads the needle today by exposing its fundamental
 operations as first-class primitives,
 with the hope and expectation that, in the future,
 one or more query planners could be
-layered on to generate execution graphs *in terms* of these
+layered on to generate execution graphs _in terms_ of these
 primitives — an area we'll explore going forward.
 If you'd like to explore with us, we'd love to talk!
 
@@ -520,7 +530,7 @@ If you'd like to explore with us, we'd love to talk!
 
 Our road map for Flow includes more endpoints for materializations,
 captures, WebAssembly support, more powerful schema annotations
-(including user-defined reductions powered by WASM!), computed shuffles, 
+(including user-defined reductions powered by WASM!), computed shuffles,
 and more.
 There's lots to do, and we'd love for you to get involved.
 
