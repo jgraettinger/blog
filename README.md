@@ -6,15 +6,15 @@
 [Flow](https://github.com/estuary/flow).
 Flow is a GitOps tool for integrating all of the systems
 you use to produce, process, and consume data.
-Today I want to talk about how Flow can help maintain complex materialized views
-in your database(s) of choice.
+Today I'll talk about how Flow can help you maintain
+complex materialized views in your database(s) of choice.
 
 ## The Shape of a Problem
 
-This post is a response to Liron Shapira's excellent "[Data Denormalization is Broken][1]".
+This post is a response to Liron Shapira's [Data Denormalization is Broken][1].
 Liron details the subtleties of a "simple" messaging application that models
 messages and user-to-room subscriptions.
-The app needs an indexed view for fast loads and good user experience,
+This hypothetical app needs an indexed view for fast loads and good user experience,
 but Liron laments the difficulty of actually _maintaining_ a view like this.
 He concludes (emphasis mine):
 
@@ -30,13 +30,14 @@ He concludes (emphasis mine):
 What we're after today - as posed by Liron - is a materialized view
 which serves up each user's number of unread chat rooms.
 It must account for:
- * Messages being sent and users viewing messages.
+ * Messages being sent by users, and other users viewing them.
  * Messages being deleted without being read by some or all users.
  * Users deleting room subscriptions which may or may not have unread messages.
  * Users *un*-seeing chat rooms by restoring an older `seenTimestamp`.
  * Message timestamps changing, perhaps due to an edit.
 
-All of these update modes from just two "toy" inputs: Messages and RoomUser subscriptions!
+Amazingly, all of these update paths stem from just two "toy" inputs:
+Messages and RoomUser subscriptions!
 The trouble is that most databases don't
 support incremental materializations,
 and we're _deeply_ out of luck if we want it live elsewhere,
@@ -46,16 +47,17 @@ Without better options we'll often bury view-update logic inside application eve
 but this gets unwieldy _quickly_ given the number of update paths.
 And to anyone who's achieved fault tolerant, correct, exactly-once increments
 of a secondary Redis index in concert with their primary database transaction
-as _application logic_, I'm both impressed and empathetic to your suffering.
+as _application logic_:
+I'm both impressed and sympathetic to your suffering.
 
 We're building Flow to make this better.
-What I'll show today is how Flow can de-structure this
+What I'll demonstrate is how Flow can de-structure this
 problem into simpler parts that are isolated from our application logic.
 Flow can test the resulting workflow,
 and can run it to maintain an always-fresh index
 as a regular PostgreSQL table.
 
-But first, let's see it in action.
+Let's see it in action.
 
 ## Demo Time
 
@@ -229,7 +231,8 @@ We'd have something like this:
 ```
 
 This is a useful structure: it tells us which subscribers have seen the room.
-You take the max timestamp of any message and compare to the `seenTimestamp` of each subscriber.
+You take the latest timestamp of any message
+and compare to the `seenTimestamp` of each subscriber.
 
 We have many rooms, so we'll need a bunch of RoomStates in a fast index somewhere.
 Each time a Message or RoomUser arrives, we'll inspect its `/roomId` and
@@ -247,7 +250,7 @@ takes two RoomStates and deeply merges them.
 
 See what just happened?
 Before we had many code paths - one for each flavor of input -
-that *each* figured out how to incrementally update a RoomState 🤮.
+that *each* figured out how to incrementally update a RoomState - *ugh!*
 Now we have trivial functions that map their input *into* a RoomState.
 Plus one reducer function that smashes those RoomStates together,
 which frankly sounds kind of hard 🤔.
@@ -256,7 +259,7 @@ At least the pure functions are a piece of cake!
 Anyway suppose we compare the *before* and *after* copies of an updated RoomState.
 Hey, this is useful too!
 Since one RoomState tells us users that have seen the room,
-comparing RoomStates tell us which users *toggled* between having seen it:
+comparing RoomStates tell us which users *toggled* between having seen the room:
 
 ```json
 // Compare this RoomState as *after* to the RoomState from before:
@@ -278,22 +281,22 @@ comparing RoomStates tell us which users *toggled* between having seen it:
 ```
 
 Let's track each of these toggles as a `-1` or `+1` increment to the user's `numUnreadRooms`.
-Now all we have to do is keep a running sum for each user somewhere... say, in a PostgreSQL table?
+Now all we have to do is keep a running sum for each user somewhere... how about in a PostgreSQL table?
 
 ## This is Just Map/Reduce
 
 This formulation is one of many possible.
-Arguably it's not even a very good one, but I'll leave shortcomings
-and improvements as an exercise.
+Arguably it's not even a very good one,
+but I'll leave improvements as an exercise for you.
 
 If you crack open a database query planner,
 this is what its gooey center looks like — though perhaps a bit
 more inscrutable and less tuneable.
 Databases use internal states like RoomState all the time,
-as an internal result
-built in service of the result that you actually asked for.
+as an internal result set
+built in service of the result that you *actually* asked for.
 
-What's salient is we've deconstructed the hard question of
+What's salient here is that we've deconstructed the hard question of
 "how should a Message or RoomUser update user's `numUnreadRooms`?"
 into a bunch of simpler questions:
 
@@ -311,7 +314,7 @@ and the general shapes tend to be really similar:
 
   * Shuffling a document on an extracted key
   * Mapping a document into another kind of document
-  * Combining or reducing two documents into one
+  * Combining or reducing multiple documents into one
   * Mapping a document, as well as *before* and *after* internal states, into other documents
   * Recursively shuffling, mapping, or reducing *those* documents in further, cascaded steps
 
@@ -330,7 +333,7 @@ to the various shapes these kinds of workflows can take
 
 If you're familiar with traditional database architecture,
 you'll notice a bit of a theme:
-internal database details are often first-class citizens within Flow.
+internal database details are often front-and-center concepts within Flow.
 This is of a piece with Flow's broader vision of
 [un-bundling the database](https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/)
  — without forsaking the properties that make databases desirable in the first place!
@@ -353,10 +356,11 @@ This is another inversion from a database:
 SQL functions like `SUM` imply reduction under the hood,
 but Flow hoists reduction to a top-level schema concern.
 
-In fact of **(A-E)** above, only **(B)** and **(D)** require any code:
+In fact, of **(A-E)** above only **(B)** and **(D)** require any code:
 You provide Flow with pure functions that map documents into other
 documents.
-Today Flow supports TypeScript modules,
+
+Flow supports TypeScript modules,
 which Flow runs on your behalf,
 or a JSON HTTP endpoint that you supply.
 In the future we'll add support for WebAssembly and OpenAPI.
@@ -409,8 +413,8 @@ collections:
   and returns documents like `{"id":"johnny","numUnseenRooms":"-1"}`.
 
   6) Returned documents are checked against the collection schema,
-  they're potentially combined on `/id` (the collection key),
-  and they're written out to the collection.
+  they're grouped and combined on user `/id` (the collection key),
+  and they're committed to the collection.
 
 Finally `userDetails` is materialized to a table:
 ```yaml
@@ -439,7 +443,7 @@ and fully isolated from our application code.
 Flow will manage its execution for us and we don't have yet another app to deploy.
 
 The solution isn't *completely* declarative —
-we still wrote a non-trivial pure function to identify
+we've still written a non-trivial function to identify
 users that changed between room states —
 but it's a lot simpler than the spaghetti of updates in application handlers.
 
@@ -483,7 +487,8 @@ For example:
 
   * Flow derivations allow for general computation:
     TypeScript, remote lambdas, and (in the future) WebAssembly.
-    It's unclear how that flexibility would be incorporated into plans.
+    It's unclear how that flexibility
+    could be incorporated into query plans.
   
 In truth this stuff is *hard* and trade-offs abound.
 Flow threads the needle today by exposing its fundamental
