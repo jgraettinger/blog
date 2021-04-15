@@ -50,7 +50,7 @@ as _application logic_, I'm both impressed and empathetic to your suffering.
 
 We're building Flow to make this better.
 What I'll show today is how Flow can de-structure this
-problem into simpler parts that are decoupled from our application logic.
+problem into simpler parts that are isolated from our application logic.
 Flow can test the resulting workflow,
 and can run it to maintain an always-fresh index
 as a regular PostgreSQL table.
@@ -208,9 +208,9 @@ Ran 1 tests, 1 passed, 0 failed
 
 ## An Implementation Sketch
 
-Before throwing Flow terminology at you, I want to give a conceptual sketch
+Before throwing Flow concepts at you, I want to give a sketch
 for how a view like this can work.
-Suppose we maintain a "RoomState" data structure for a chat room, with:
+Suppose we maintain a RoomState data structure for a chat room with:
 
   * Messages of the room and their associated timestamps.
   * Subscribers of the room and when they last saw it.
@@ -246,13 +246,14 @@ single Message or RoomUser into a RoomState, and a *reducer* which
 takes two RoomStates and deeply merges them.
 
 See what just happened?
-We went from having many code paths - one for each flavor of input -
-that *each* have to figure out how to incrementally update a RoomState 🤮,
-to trivial functions that just map their input *to* a RoomState.
-Plus one reducer function that smashes those RoomStates together, which frankly sounds kind of hard 🤔.
+Before we had many code paths - one for each flavor of input -
+that *each* figured out how to incrementally update a RoomState 🤮.
+Now we have trivial functions that just map inputs *into* a RoomState.
+Plus one reducer function that smashes those RoomStates together,
+which frankly sounds kind of hard 🤔.
 At least the pure functions are a piece of cake!
 
-Anyway suppose we compare *before* and *after* copies of a RoomState with each update.
+Anyway suppose we compare the *before* and *after* copies of an updated RoomState.
 Hey, this is useful too! Since one RoomState tells us users that have seen the room,
 before vs after RoomStates tell us which users *toggled* between having seen it:
 
@@ -260,12 +261,12 @@ before vs after RoomStates tell us which users *toggled* between having seen it:
 // Compare this RoomState as *after* to the RoomState from before:
 {
   "messages": {
-    // "m102": 1532, <= Deleted.
+    // Deleted: "m102": 1532,
     "m94": 1483
   },
   "subscribers": [
     {"userId":"liron-shapira", "seenTimestamp": 1510},
-    {"userId":"johnny", "seenTimestamp": 0} // New subscriber.
+    {"userId":"johnny", "seenTimestamp": 0} // Added.
   ]
 }
 
@@ -276,7 +277,7 @@ before vs after RoomStates tell us which users *toggled* between having seen it:
 ```
 
 Let's track each of these toggles as a `-1` or `+1` increment to the user's `numUnreadRooms`.
-Now all we have to do is keep a running for each user somewhere... say, in a PostgreSQL table?
+Now all we have to do is keep a running sum for each user somewhere... say, in a PostgreSQL table?
 
 ## This is Just Map/Reduce
 
@@ -285,7 +286,7 @@ Arguably it's not even a very good one, but I'll leave shortcomings
 and improvements as an exercise.
 
 If you crack open a database query planner,
-this is what its gooey center looks like -- though perhaps a bit
+this is what its gooey center looks like — though perhaps a bit
 more inscrutable and less tuneable.
 Databases use internal states like RoomState all the time,
 as an internal result
@@ -296,38 +297,42 @@ What's salient is we've deconstructed the hard question of
 into a bunch of simpler questions:
 
   * **(A)** How should a Message or RoomUser be shuffled to its current RoomState?
-  * **(B)** How do I turn that Message or RoomUser _into_ a RoomState?
-  * **(C)** Given a current RoomState, how do I reduce in an update to produce a *next* state?
-  * **(D)** Given previous and next states, which users toggled between having seen the room ?
-  * **(E)** Given the set of toggles of each user, what's their current `numUnreadRooms`?
+  * **(B)** How do I turn that Message or RoomUser into a RoomState?
+  * **(C)** Given a current RoomState,
+    how do I reduce an update to produce a next state?
+  * **(D)** Given previous and next RoomSates,
+    which users toggled between having seen the room?
+  * **(E)** Given the set of toggles of each user,
+    what's their current `numUnreadRooms`?
 
 _Lots_ of problems can be tackled by this kind of destructuring
 and the general shapes tend to be really similar:
 
-  * Shuffling a document on an extracted key.
-  * Mapping a document into another kind of document.
-  * Combining or reducing two documents into one.
-  * Mapping a document, as well as *before* and *after* internal states, into other documents.
-  * Recursively shuffling, mapping, or reducing *those* documents in further, cascaded steps.
+  * Shuffling a document on an extracted key
+  * Mapping a document into another kind of document
+  * Combining or reducing two documents into one
+  * Mapping a document, as well as *before* and *after* internal states, into other documents
+  * Recursively shuffling, mapping, or reducing *those* documents in further, cascaded steps
 
 ## Flow As Continuous Map/Reduce
 
-Flow lets you express map/reduce workflows in declarative terms:
-YAML definitions and associated pure-function lambdas.
-You *apply* specifications to the Flow runtime
-which executes them continuously, at any scale, driven by your writes,
+Flow lets you express map/reduce workflows in declarative terms: a
+[catalog](https://docs.estuary.dev/concepts/catalog-entities)
+of YAML definitions and associated pure-function lambdas.
+You *apply* a catalog to the Flow runtime.
+It then executes it continuously, at any scale, driven by your writes,
 with end-to-end "exactly once" semantics.
 
-Specifications are succinct but don't sacrifice fidelity
+Catalog specifications are succinct but don't sacrifice fidelity
 to the various shapes these kinds of workflows can take
--- as simple as possible but no simpler.
+— as simple as possible but no simpler.
 
 If you're familiar with traditional database architecture,
 you'll notice a bit of a theme:
 internal database details are often first-class citizens within Flow.
 This is of a piece with Flow's broader vision of
 [un-bundling the database](https://www.confluent.io/blog/turning-the-database-inside-out-with-apache-samza/)
- -- without forsaking the properties that make databases desirable in the first place!
+ — without forsaking the properties that make databases desirable in the first place!
 
 Internal states are no exception.
 Flow calls these
@@ -335,12 +340,12 @@ Flow calls these
 keyed documents used for indexed states like RoomState.
 Registers enable the full gamut of stateful streaming workflows,
 including joins and aggregations.
-They're fast, persistent,
-and aren't beholden to the windowing and scaling constraints
-that plague other streaming workflow engines.
+They're fast, durable,
+and avoid the windowing and scaling limitations
+that plague other stateful stream architectures.
 
 Writing reducers can be verbose and error-prone, so with Flow **you don't write them**.
-Instead you annotate your schemas with
+Instead you annotate JSON schemas with
 [`reduce` annotations](https://docs.estuary.dev/reference/catalog-reference/schemas-and-data-reductions#reductions)
 that tell Flow how to combine documents having the same key.
 This is another inversion from a database:
@@ -350,14 +355,17 @@ but Flow hoists reduction to a top-level schema concern.
 In fact of **(A-E)** above, only **(B)** and **(D)** require any code:
 You provide Flow with pure functions that map documents into other
 documents.
-Today Flow requires that these mappers be provided as strongly-typed TypeScript,
-or as a remote JSON HTTP lambda. In the future we'll add support for WebAssembly.
+Today Flow supports TypeScript modules,
+which Flow runs on your behalf,
+or a JSON HTTP endpoint that you supply.
+In the future we'll add support for WebAssembly and OpenAPI.
 
 ---
 
-Putting this all together, here's the workflow as a
+Putting it all together, here's a
 derived collection and
-[schema](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.schema.yaml):
+[schema](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.schema.yaml)
+that implements the workflow:
 ```yaml
 collections:
   userDetails:
@@ -412,31 +420,32 @@ materializations:
     source: { name: userDetails }
 ```
 
-Materializations are always in terms of the collection's key.
-The schema annotates that `numUnreadRooms` is reduced as a sum,
-so Flow maintains the running lifetime tally.
-Storage for the materialization is provided by the database.
-Flow reads, modifies, and writes documents as needed:
+Materializations are always in terms of the collection's key
+and they use only the storage provided by the database itself
+(without keeping another internal copy).
+The schema annotates that `numUnreadRooms` is to be summed,
+so Flow maintains the running lifetime tally directly in the table
+by reading, combining, and storing documents:
 
 ![Animation of Materialization](./images/materialization.gif)
 
 ## How this Helps
 
 What we've achieved is a de-normalized view, in our database of choice,
-that's reactive to our normalized business events, past and future.
+that's reactive to our normalized business events (past and future).
 It's consolidated into a single place, strongly-typed, tested,
-and completely isolated from our application code.
+and fully isolated from our application code.
 Flow will manage its execution for us and we don't have yet another app to deploy.
 
 The solution isn't *completely* declarative —
-we still had to write a non-trivial
-pure function to identify users that changed between room states —
-but we've substantially simplified from the spaghetti of per-event application handlers.
+we still wrote a non-trivial pure function to identify
+users that changed between room states —
+but it's a lot simpler than the spaghetti of updates in application handlers.
 
-From here we're able to evolve the derivation over time,
-or compose it as an input of other derivations.
-We can add a materialization into another system,
-perhaps to migrate it into a key/value store.
+From here we'll be able to evolve the derivation over time,
+or add a materialization into another system
+(perhaps we'll want a key/value store).
+We could even compose it as an input of yet-another derivation.
 
 ## On Query Planners
 
@@ -454,9 +463,9 @@ and succinct expressions of complex and long-lived workflows,
 which are production-ready and integrate into the places you need them.
 For example:
 
-  * The details of the query plan (e.x. derivations and registers) *really* matter,
-    particularly for workflows running at scale for months or years.
-    You have to understand their operational aspects,
+  * The details of a query plan *really* matter,
+    particularly when running at scale for months or years.
+    You have to understand its operational aspects,
     and planners often get in the way of an engineer who knows what they want.
 
   * You'll need to evolve workflows over time —
