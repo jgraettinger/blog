@@ -291,7 +291,6 @@ Now all we have to do is keep a running sum for each user somewhere... how about
 
 ## This is Just Map/Reduce
 
-The paradigm, that is, not MapReduce™.
 This formulation is one of many possible.
 Arguably it's not even a very good one,
 but I'll leave improvements as an exercise for you.
@@ -355,16 +354,13 @@ They're fast, durable,
 and avoid the windowing and scaling limitations
 that plague other stateful stream architectures.
 
-Writing reducers can be verbose and error-prone,
-so with Flow **you don't write them**.
+Writing reducers can be verbose and error-prone, so with Flow **you don't write them**.
 Instead you annotate JSON schemas with
 [`reduce` annotations](https://docs.estuary.dev/reference/catalog-reference/schemas-and-data-reductions#reductions)
 that tell Flow how to combine documents having the same key.
 This is another inversion from a database:
 SQL functions like `SUM` imply reduction under the hood,
-but Flow hoists reduction to a top-level schema concern
-— a subtle superpower that's leveraged to reduce data volumes
-and enhance performance at _every stage of processing_.
+but Flow hoists reduction to a top-level schema concern.
 
 In fact, of **(A-E)** above only **(B)** and **(D)** require any code:
 You provide Flow with pure functions that map documents into other
@@ -491,28 +487,38 @@ language like SQL into an _internal execution plan_ using something
 like derivations and registers?
 
 The short answer is that a query-planner _first_ approach is
-incompatible with Flow's broader objectives:
-composable, straightforward
-and succinct expressions of complex and long-lived workflows,
-which are production-ready and integrate into the places you need them.
-For example:
+incompatible with Flow's broader objective of
+being your tool of choice for building production data products.
 
+This is because:
+
+- There isn't a query language I'm aware of, including SQL,
+  that's good at representing the temporal dynamics of stream-to-stream joins.
+  Imagine you have a stream of products and customer orders.
+  You express a simple SQL query that joins orders against product
+  listings to arrive at an order price.
+
+  Okay, but _which_ price ? The price right now,
+  or as it was at the time of the order?
+  Probably the latter, right?
+  But how do you express that in SQL?
+  
 - The details of a query plan _really_ matter,
   particularly when running at scale for months or years.
   You have to understand its operational aspects,
   and planners often get in the way of an engineer who knows what they want.
 
+  Workflows must be straight-forward for your whole team to understand:
+  Not just in what they do, but how they _work_.
+  Cheap operations must be obviously cheap,
+  and expensive ones obviously expensive.
+
 - You'll need to evolve workflows over time —
   joining in a new data set,
   enriching with extra fields, or fixing a bug —
-  and you may not appreciate being forced to
-  recompute from piles of historical data (expensive!)
+  and you may want to do it on a go-forward basis
+  without disrupting downstream use cases.
   Derivations allow for such changes today, but it's unclear how a planner could.
-
-- One team's output is another team's input, and
-  you'll want to re-use derivations in many data products.
-  The structure and overall optimization of the execution graph
-  is more important than the plan of a single query.
 
 - Flow derivations allow for general computation:
   TypeScript, remote lambdas, and (in the future) WebAssembly.
