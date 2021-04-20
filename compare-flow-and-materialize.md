@@ -150,8 +150,10 @@ expressing the temporal dynamics of stream-to-stream joins.
 Sometimes you want reactivity, and sometimes you don't.
 
 To sketch how this works in Flow, you create a derivation which:
-- Indexes current product pricing within its register, shuffled on product ID, and
-- Joins each order, on product ID, with its current price to produce an update of the customer's lifetime value.
+- Indexes current product pricing within its register,
+  keyed on product ID, and
+- Joins each order, on product ID, with its current price to
+  produce an update of the customer's lifetime value.
 
 _"But wait,"_ I hear you ask,
 _"in what order are product updates vs orders processed?!??"_
@@ -231,60 +233,67 @@ they're all effectively considered to have "happened" at the same time.
 
 ## Consistency
 
-Some
-[hay has been made](https://github.com/frankmcsherry/blog/blob/master/posts/2020-06-19.md)
-regarding Materialize's ability to provide internally consistent queries.
+Materialize
+[has a capability](https://github.com/frankmcsherry/blog/blob/master/posts/2020-06-19.md)
+to provide internally consistent queries.
 This means that, for a given timestamp,
-your queried view results will reflect *all* of the processed inputs
+your queried views always reflect *all* of the processed inputs
 bearing that timestamp (or less), no matter their source.
+It does this by holding back all of the effects of timestamps
+until it can be sure its processing has settled to a consistent state.
 
 Flow doesn't offer this.
-When scaled, shards of a Flow derivation or
+When scaled out, shards of a Flow derivation or
 materialization coordinate their reads
 and will *approximately* process at the same rate,
 but they're running independent transactions
 over disjoint chunks of a key space.
-If there's a whole-collection invariant your expecting, like
+This minimizes latency,
+but if there's a whole-collection invariant your expecting, like
 [bank balances must always sum to zero](https://scattered-thoughts.net/writing/internal-consistency-in-streaming-systems/),
 you will see it be violated as transactions
 commit at slightly different times.
 So the fact that Materialize can offer this is a pretty cool result.
 
-But it's not necessarily a _practical_ result.
+It's not always a _practical_ result.
 
-Timely's guarantee
-requires that it be able to "retire" timestamps:
-essentially extracting a promise from you that you'll never
-present another record with that timestamp (or less) again, pinky swear.
+The guarantee requires that Timely Dataflow be able to "retire" timestamps:
+essentially extracting a promise that you'll never
+present another record with that timestamp (or less) again.
 However the broader context is that you're building a view over
 the decisions of other systems,
-and *you simply can't make that promise*.
+and *you can't make that promise*.
 The network will partition, or a machine will crash:
 one way or another records *will* arrive after
 their timestamp has been retired.
 At that point you can either
-a) drop records on the floor, leading to inconsistency with what your external system believes happened, or
-b) choose to process them with a later, incorrect timestamp... which introduces an internal inconsistency!
+a) drop records on the floor, leading to inconsistency with
+   what your external system believes happened, or
+b) choose to process them with a later
+   (incorrect) timestamp,
+   which is an inconsistency with respect
+   to the actual timestamp.
 
-**tl;dr** You can have either eventual consistency with your *external* systems,
+You can have either eventual consistency with your *external* systems,
 or *internal* consistency that may disagree with your external systems,
 but you can't have both.
-Flow opts for the former, and Timely Dataflow the latter.
-Materialize itself appears to opt for the former as well,
-ironically, since it assigns timestamps as it reads from your sources.
+
+**tl;dr** Flow opts for the former, and Timely Dataflow the latter.
+Materialize actually uses a hybrid option:
+it assigns timestamps as it _reads_ from your records,
+rather than using timestamps contained _within_ your records.
+This makes it eventually consistent with your external systems,
+and internally consistent with respect to the effects
+of a _single_ read event,
+but internally *in*consistent to multiple events bearing
+the same user timestamp.
 
 _Addendum_: there's some
 [experimental work](https://www.youtube.com/watch?v=0WijjN0LiZ4)
 to incorporate "bitemporal" timestamps in differential dataflow.
-This effectively extends the definition of a timestamp to a
-(read-time, user-time) tuple.
-It's a neat idea that allows the dataflow
-to incorporate late data at any time.
-As tradeoff, though,
-it weakens the definition of _internally consistent_
-by re-defining timestamps at the edge of where the dataflow
-happens to accept your data.
-It's consistent to _a_ timestamp, but not _your_ timestamp.
+This effectively extends the definition of a timestamp
+into multiple dimensions, as a (read-time, user-time) tuple.
+I don't believe this fundamentally changes the tl;dr.
 
 ## Better Together?
 
