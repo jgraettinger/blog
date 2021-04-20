@@ -492,38 +492,35 @@ being your tool of choice for building production data products.
 
 This is because:
 
+- Flow derivations allow for bringing your own code:
+  run TypeScript, remote lambdas, and (in the future) WebAssembly.
+  It's unclear how that flexibility
+  could be incorporated into query plans.
+
 - There isn't a query language I'm aware of, including SQL,
   that's good at representing the temporal dynamics of stream-to-stream joins.
   Imagine you have a stream of products and customer orders.
   You express a simple SQL query that joins orders against product
   listings to arrive at an order price.
 
-  Okay, but _which_ price ? The price right now,
+  Okay, but... _which_ price ? The price right now,
   or as it was at the time of the order?
   Probably the latter, right?
-  But how do you express that in SQL?
-  
-- The details of a query plan _really_ matter,
-  particularly when running at scale for months or years.
-  You have to understand its operational aspects,
-  and planners often get in the way of an engineer who knows what they want.
-
-  Workflows must be straight-forward for your whole team to understand:
-  Not just in what they do, but how they _work_.
-  Cheap operations must be obviously cheap,
-  and expensive ones obviously expensive.
+  But how do you express that in SQL again?
 
 - You'll need to evolve workflows over time —
   joining in a new data set,
   enriching with extra fields, or fixing a bug —
   and you may want to do it on a go-forward basis
   without disrupting downstream use cases.
-  Derivations allow for such changes today, but it's unclear how a planner could.
+  Derivations allow for such changes today,
+  but it's unclear how a planner could.
 
-- Flow derivations allow for general computation:
-  TypeScript, remote lambdas, and (in the future) WebAssembly.
-  It's unclear how that flexibility
-  could be incorporated into query plans.
+- The details of a query plan really matter,
+  particularly when they're part of a production service
+  run at scale for months or years.
+  Your whole team should understand the plan's operational aspects,
+  and planners often get in the way of an engineer who knows what they want.
 
 In truth this stuff is _hard_ and trade-offs abound.
 Flow threads the needle today by exposing its fundamental
@@ -538,8 +535,8 @@ If you'd like to explore with us, we'd love to talk!
 
 Our road map for Flow includes more endpoints for materializations,
 captures, WebAssembly support, more powerful schema annotations
-(including user-defined reductions powered by WASM!), computed shuffles,
-and more.
+(including user-defined reductions powered by WebAssembly!),
+computed shuffles, and more.
 There's lots to do, and we'd love for you to get involved.
 
 Please check out

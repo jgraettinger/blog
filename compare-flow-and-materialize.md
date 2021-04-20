@@ -239,20 +239,21 @@ your queried view results will reflect *all* of the processed inputs
 bearing that timestamp (or less), no matter their source.
 
 Flow doesn't offer this.
-When scaled, shards of a Flow derivation or  materialization coordinate their reads
-and will *approximately* process at the same rates,
-but they're running independent and uncoordinated transactions
+When scaled, shards of a Flow derivation or
+materialization coordinate their reads
+and will *approximately* process at the same rate,
+but they're running independent transactions
 over disjoint chunks of a key space.
 If there's a whole-collection invariant your expecting, like
 [bank balances must always sum to zero](https://scattered-thoughts.net/writing/internal-consistency-in-streaming-systems/),
-you will see it be violated as derivations
-process and refine the view.
+you will see it be violated as transactions
+commit at slightly different times.
 So the fact that Materialize can offer this is a pretty cool result.
 
 But it's not necessarily a _practical_ result.
 
-Timely's guarantees in this regard
-require that it be able to "retire" timestamps:
+Timely's guarantee
+requires that it be able to "retire" timestamps:
 essentially extracting a promise from you that you'll never
 present another record with that timestamp (or less) again, pinky swear.
 However the broader context is that you're building a view over
@@ -263,7 +264,7 @@ one way or another records *will* arrive after
 their timestamp has been retired.
 At that point you can either
 a) drop records on the floor, leading to inconsistency with what your external system believes happened, or
-a) choose to process them with a later, incorrect timestamp... which introduces an internal inconsistency!
+b) choose to process them with a later, incorrect timestamp... which introduces an internal inconsistency!
 
 **tl;dr** You can have either eventual consistency with your *external* systems,
 or *internal* consistency that may disagree with your external systems,
@@ -272,19 +273,33 @@ Flow opts for the former, and Timely Dataflow the latter.
 Materialize itself appears to opt for the former as well,
 ironically, since it assigns timestamps as it reads from your sources.
 
+_Addendum_: there's some
+[experimental work](https://www.youtube.com/watch?v=0WijjN0LiZ4)
+to incorporate "bitemporal" timestamps in differential dataflow.
+This effectively extends the definition of a timestamp to a
+(read-time, user-time) tuple.
+It's a neat idea that allows the dataflow
+to incorporate late data at any time.
+As tradeoff, though,
+it weakens the definition of _internally consistent_
+by re-defining timestamps at the edge of where the dataflow
+happens to accept your data.
+It's consistent to _a_ timestamp, but not _your_ timestamp.
+
 ## Better Together?
 
 Materialize appears a very powerful tool that I wouldn't hesitate to
 spike out for internal analysis and reporting use cases.
 The ability to express complex reactive joins and aggregations
-as SQL is awesome for many a use cases,
-if not _every_ use case.
+as SQL is awesome for many a use cases
+(if not _every_ use case).
 It's a high leverage tool that could be handed to a team
 of data analysts to have them up and running quickly.
 
-(Aside: Though I'd be a bit concerned regarding unbounded growth of internal indexes,
-and whether analyst user cohorts _really_ understand the operational
-aspects and overheads of their queries).
+(Aside: Though I'd be a bit concerned regarding unbounded
+growth of internal indexes,
+and whether analyst user cohorts _really_ understand
+the operational overheads of their queries).
 
 It's not a system of record, and it's not trying to be.
 You'll need to bring your own,
@@ -303,7 +318,7 @@ So, you may eventually want more than one Materialize instance,
 where each is focused on different sub-aspects of your operations.
 You'll need a system of record which can orchestrate and "feed"
 those instances with the correct datasets, with low latency.
-Ideally one which has a backed-in notion of
+Ideally one which has a baked-in notion of
 event time which could tightly integrate with that of Materialize.
 
 That... sounds a lot like Flow?
@@ -327,4 +342,4 @@ that Flow expects, and `materialized` doesn't yet implement:
 - Support for `COPY FROM` (used to bulk load keys)
 - Support for creation of temporary tables (also for keys)
 
-Hopefully we can make this work in the future.
+Hopefully we can make this work in the future!
