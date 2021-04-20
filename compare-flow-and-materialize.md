@@ -239,8 +239,9 @@ to provide internally consistent queries.
 This means that, for a given timestamp,
 your queried views always reflect *all* of the processed inputs
 bearing that timestamp (or less), no matter their source.
-It does this by holding back all of the effects of timestamps
-until it can be sure its processing has settled to a consistent state.
+It does this by holding back all of the effects of a timestamp
+until it can be sure its processing has settled,
+trading latency in exchange for consistency.
 
 Flow doesn't offer this.
 When scaled out, shards of a Flow derivation or
@@ -248,7 +249,7 @@ materialization coordinate their reads
 and will *approximately* process at the same rate,
 but they're running independent transactions
 over disjoint chunks of a key space.
-This minimizes latency,
+This minimizes end-to-end latency,
 but if there's a whole-collection invariant your expecting, like
 [bank balances must always sum to zero](https://scattered-thoughts.net/writing/internal-consistency-in-streaming-systems/),
 you will see it be violated as transactions
