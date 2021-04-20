@@ -6,7 +6,7 @@ both systems provide a means of tackling continuously materialized views,
 so what kinds of problems are each suited for,
 and when would you use one over the other?
 
-Obviously, I have some bias here.
+Obviously I have some bias here.
 I'll be as even-handed as I know how, but reader beware.
 Also, while I know Flow very well, I'm not a Materialize expert.
 I've done my best to inform myself
@@ -17,7 +17,7 @@ you should consider Materialize for rapid answers to questions
 of _"what happened?"_ within your data-oriented products and services.
 You should consider Flow for _building_ those products and services.
 It's reasonable, and probably even a good idea,
-to run instances of Materialize which are feed by Flow.
+to run instances of Materialize which are fed by Flow.
 
 Let's get into it.
 
@@ -53,10 +53,10 @@ Materialize
 to act as a system of record.
 
 Flow collections *are* a system of record.
-When Flow captures or derives collections from your system data,
+When Flow captures or derives collections from your data systems,
 those collections are backed by an interoperable data lake of your
 JSON documents, as regular files on cloud storage.
-They're transactional and durable even if a machine
+Collections are transactional and durable even if a machine
 or an availability zone fails.
 You can treat collections as a long-term source of truth,
 or prune data using a standard bucket lifecycle policy.
@@ -96,17 +96,18 @@ ecosystem of tools, but they require that *you* be the query planner.
 
 Still, there are reasons you might want this:
 one is that they allow for **general computation**.
-You can bring your own code and Flow will run it using V8 and (soon) WebAssembly.
-Or you can have Flow call a lambda that you host.
+You can bring your own codebase and Flow will run it using V8
+and (soon) WebAssembly.
+Or Flow can call a lambda that you host.
 
-Another is that they're **easy to evolve**.
+Another is that derivations are **easy to evolve**.
 You have the ability to fix a bug, change behavior,
 or even enrich a derivation by joining against a new dataset
 on a go-forward basis,
 without interrupting any of its downstream uses.
 Derivations can also be **dynamically scaled**
-and have fine grained **fault tolerance**,
-though I'll expand on this in another post.
+and have fast fine-grained **fault tolerance**.
+I'll expand on this in another post.
 
 Still another is in the **types of joins** you can express and their reactivity.
 
@@ -135,7 +136,7 @@ you want that to flow through into the view of their lifetime value.
 Neat!
 
 Now what happens if you update product pricing?
-Ah, we have a problem here.
+Well, ... hmm. We have a problem here.
 A pricing update will alter the lifetime value of a customer
 who ordered the product in the past, *before* our price change.
 That's not right.
@@ -149,8 +150,8 @@ expressing the temporal dynamics of stream-to-stream joins.
 Sometimes you want reactivity, and sometimes you don't.
 
 To sketch how this works in Flow, you create a derivation which:
-- indexes current product pricing within its register, shuffled on product ID, and
-- joins each order, on product ID, with its current price to produce an update of the customer's lifetime value.
+- Indexes current product pricing within its register, shuffled on product ID, and
+- Joins each order, on product ID, with its current price to produce an update of the customer's lifetime value.
 
 _"But wait,"_ I hear you ask,
 _"in what order are product updates vs orders processed?!??"_
@@ -203,7 +204,7 @@ like reading collections with a relative time delay,
 or with different priorities. More on this in another post). 
 
 Materialize is built on Timely Dataflow,
-which puts a lot of weight into the timestamps associated with records.
+which requires that every record have an associated timestamp.
 Today Materialize picks a timestamp for you
 at the time that a record is _read_,
 say from Kafka,
@@ -290,9 +291,9 @@ You'll need to bring your own,
 and on startup the database will need to replay that history
 to rebuild its internal states and views.
 
-It's also not clear to me you should consider Materialize for any
-problems that can't comfortably fit in RAM on a big vertical machine.
-It's techniques of
+It's also not clear to me you should consider Materialize for
+problems that can't comfortably fit in RAM on a big machine.
+It's technique of
 [index arrangements](https://github.com/frankmcsherry/blog/blob/master/posts/2020-11-18.md)
 is clever and efficient
 *so long as* you can access that index through shared memory,
@@ -311,7 +312,7 @@ That... sounds a lot like Flow?
 
 On paper, Flow should be happy materializing
 a collection into a Materialize table.
-Flow stores its checkpoints right in the target database
+Flow stores its checkpoints in the target database
 for proper exactly-once transactions,
 so it's not a problem that
 Materialize restarts as an empty database:
@@ -323,7 +324,7 @@ but had to table it due to missing bits of PostgreSQL
 that Flow expects, and `materialized` doesn't yet implement:
 
 - Support for transactional schema updates
-- Support for `COPY FROM` (used to efficiently load transaction keys)
-- Support for creation of temporary tables
+- Support for `COPY FROM` (used to bulk load keys)
+- Support for creation of temporary tables (also for keys)
 
 Hopefully we can make this work in the future.
