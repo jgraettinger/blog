@@ -375,7 +375,7 @@ In the future we'll add support for WebAssembly and OpenAPI.
 
 Putting it all together, here's a
 derived collection and
-[schema](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.schema.yaml):
+[schema](userDetails.schema.yaml):
 
 ```yaml
 collections:
@@ -425,7 +425,7 @@ Runtime->Collections: Commit UserDetails:\n{id:johnny, numRooms:-1}
    RoomState register on `/roomId`.
 
 2. It calls an `update`
-   [TypeScript lambda](https://github.com/jgraettinger/filling-paradigm-shaped-hole/blob/master/userDetails.flow.ts)
+   [TypeScript lambda](userDetails.flow.ts)
    to map the source document into a RoomState.
 
 3. It uses `reduce` schema annotations to fold the update into the current register.

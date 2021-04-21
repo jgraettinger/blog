@@ -2,7 +2,8 @@
 
 I'm often asked how to think about Flow vs Materialize.
 This is a good question:
-both systems provide a means of tackling continuously materialized views,
+at the highest levels both systems help you wrangle streaming data,
+and both provide a means for tackling continuous views,
 so what kinds of problems are each suited for,
 and when would you use one over the other?
 
@@ -14,10 +15,12 @@ but will graciously accept corrections where I've gone off the rails.
 
 That said, my central take-away is this:
 you should consider Materialize for rapid answers to questions
-of _"what happened?"_ within your data-oriented products and services.
-You should consider Flow for _building_ those products and services.
-It's reasonable, and probably even a good idea,
-to run instances of Materialize which are fed by Flow.
+of _"what happened?"_ within your event-oriented applications,
+products and services.
+You should consider Flow for _integrating_ those applications,
+products and services.
+In the future, my hope for Flow is that it makes it a lot easier to
+get up and running with new tools like Materialize.
 
 Let's get into it.
 
@@ -34,6 +37,7 @@ It's a very cool product with some serious engineering chops behind it.
 Flow is _not_ a database.
 It's a orchestration tool that makes it easy to continuously capture
 data produced by your systems into an interoperable cloud storage lake;
+to invoke your functions as data arrives,
 to transform that data in arbitrary ways,
 and to load into others of your systems.
 You can use Flow to build joins and aggregations into your databases of choice,
@@ -44,18 +48,24 @@ of why you might want to use a tool like Flow.
 ## System of Record
 
 Materialize is an in-memory database.
-On startup, it pulls from your data sources to rebuild
+On startup it pulls from your data sources to rebuild
 its internal indices and query results.
 Its processing model ensures the repeatability of your views given stable inputs,
-but it relies on another system (Kafka, or S3) to provide that stability.
-Materialize
-[doesn't attempt](https://materialize.com/docs/sql/insert/)
-to act as a system of record.
+but it relies on another system to provide that stability.
+Materialize doesn't attempt to act as a system of record,
+and requires that you bring your own —
+which can be a challenge if your data is scattered between a
+[volatile](https://materialize.com/docs/overview/volatility/)
+stream and separate batch storage, as is common.
 
 Flow collections *are* a system of record.
 When Flow captures or derives collections from your data systems,
-those collections are backed by an interoperable data lake of your
-JSON documents, as regular files on cloud storage.
+those collections are persisted as an interoperable data lake of your
+JSON documents — as regular files on cloud storage — without losing
+the context of how those files stitch into the stream.
+Collection readers are able to transparently toggle between direct
+file reads (efficient! scalable!) and millisecond-latency tailing
+as needed.
 Collections are transactional and durable even if a machine
 or an availability zone fails.
 You can treat collections as a long-term source of truth,
@@ -88,8 +98,8 @@ your having to think too hard about it.
 This is legitimately *very cool*.
 
 Flow has lower-level primitives, **derivations** and their **registers**.
-They're building blocks for assembling any kind of stateful,
-continuous map/reduce workflow,
+They're building blocks for assembling stateful,
+continuous map/reduce workflows,
 including cyclic computations over generalized graphs.
 Derivations are pretty succinct in comparison to the the broader
 ecosystem of tools, but they require that *you* be the query planner.
@@ -140,12 +150,15 @@ Well, ... hmm. We have a problem here.
 A pricing update will alter the lifetime value of a customer
 who ordered the product in the past, *before* our price change.
 That's not right.
-To fix this you'll actually need to model (and index!) the
-complete pricing history of your products,
-and join each customer order to the product price as it
-was at the time of the order.
+To fix this you'll actually need to model and index the
+full pricing history of your products,
+and join each customer order to the product price
+*as it was* at the time of the order.
 
-SQL is a great language, but it's not a perfect fit for
+This may or may not make sense for your use case.
+SQL is an amazing language,
+and my purpose here is not to throw wrenches,
+but just to point out that it's not always a perfect fit for
 expressing the temporal dynamics of stream-to-stream joins.
 Sometimes you want reactivity, and sometimes you don't.
 
@@ -164,11 +177,11 @@ but it also _doesn't matter_ because...
 ## Transactions
 
 Flow always processes in durable transactions.
-Everything it does --
+Everything it does —
 processing source documents,
 updating internal register states,
 writing out collection documents,
-committing an update to a materialized table --
+committing an update to a materialized table —
 either happens as an atomic operation,
 or doesn't happen at all.
 
@@ -183,9 +196,9 @@ happen at the same time.
 Flow will pick an ordering and it won't forget it. 
 
 Materialize, however, *does* forget the relative order across restarts.
-That's not as big a deal as it might seem, though,
-because Materialize joins are always (and only) fully reactive.
-It will settle at a consistent answer no matter *what* the read order is.
+That's also not a problem, though,
+because Materialize joins are fully reactive.
+It will settle at the right answer no matter *what* the read order is.
 
 Speaking of order, let's talk about time.
 
@@ -201,21 +214,19 @@ A collection is made up of one or more totally-ordered streams,
 each a physical partition,
 and documents are read across
 streams of collections in order of their wall-time ingestion timestamp
-(though Flow offers some really powerful knobs here,
+(though Flow offers some neat knobs here,
 like reading collections with a relative time delay,
-or with different priorities. More on this in another post). 
+or with different priorities). 
 
 Materialize is built on Timely Dataflow,
 which requires that every record have an associated timestamp.
-Today Materialize picks a timestamp for you
-at the time that a record is _read_,
-say from Kafka,
-meaning that timestamp assignment is racy across sources or partitions.
+Today Materialize picks a timestamp for you at the time that a record is read,
+which may vary across partitions, machine failures, and restarts.
 My understanding is that, in the future, Materialize
 [wants to use](https://materialize.com/change-data-capture-part-1/)
 the timestamps already in your data.
 
-Either way, its important to understand that both
+Either way, its good to understand that both
 Flow and Materialize use timestamps,
 and in both systems these timestamps provide only an *approximately right* 
 means of ordering documents.
@@ -224,12 +235,17 @@ In Flow's case reads over collection histories have a stable _total_ order,
 but there's an unavoidable race when tailing collections and you're unsure
 if more data is forthcoming.
 
-Materialize is totally ordered over its timestamps,
-but timestamps themselves must be pretty coarse --
-by default one second --
+Materialize is totally ordered over timestamps,
+but timestamps themselves must be pretty coarse —
+by default one second —
 for good performance.
 The relative ordering of documents _within_ a timestamp is lost:
 they're all effectively considered to have "happened" at the same time.
+
+I'll also point out that Materialize _wants_ a durable event timestamp that
+[can make progress guarantees](https://news.ycombinator.com/item?id=26862051),
+and Flow _has_ one built-in.
+An interesting opportunity?
 
 ## Consistency
 
@@ -241,10 +257,10 @@ your queried views always reflect *all* of the processed inputs
 bearing that timestamp (or less), no matter their source.
 It does this by holding back all of the effects of a timestamp
 until it can be sure its processing has settled,
-trading latency in exchange for consistency.
+trading a bit of latency in exchange for consistency.
 
 Flow doesn't offer this.
-When scaled out, shards of a Flow derivation or
+Shards of a Flow derivation or
 materialization coordinate their reads
 and will *approximately* process at the same rate,
 but they're running independent transactions
@@ -254,7 +270,7 @@ but if there's a whole-collection invariant your expecting, like
 [bank balances must always sum to zero](https://scattered-thoughts.net/writing/internal-consistency-in-streaming-systems/),
 you will see it be violated as transactions
 commit at slightly different times.
-So the fact that Materialize can offer this is a pretty cool result.
+So the fact that Materialize can offer this is a really cool result.
 
 It's not always a _practical_ result.
 
@@ -266,72 +282,100 @@ the decisions of other systems,
 and *you can't make that promise*.
 The network will partition, or a machine will crash:
 one way or another records *will* arrive after
-their timestamp has been retired.
+their event timestamp has been retired.
 At that point you can either
 a) drop records on the floor, leading to inconsistency with
    what your external system believes happened, or
 b) choose to process them with a later
    (incorrect) timestamp,
    which is an inconsistency with respect
-   to the actual timestamp.
+   to the event timestamp.
 
 You can have either eventual consistency with your *external* systems,
 or *internal* consistency that may disagree with your external systems,
 but you can't have both.
 
 **tl;dr** Flow opts for the former, and Timely Dataflow the latter.
-Materialize actually uses a hybrid option:
+Today Materialize actually uses a hybrid option:
 it assigns timestamps as it _reads_ from your records,
 rather than using timestamps contained _within_ your records.
 This makes it eventually consistent with your external systems,
 and internally consistent with respect to the effects
 of a _single_ read event,
-but internally *in*consistent to multiple events bearing
-the same user timestamp.
+but internally *in*consistent to multiple records bearing
+the same event timestamp.
 
-_Addendum_: there's some
+There's some
 [experimental work](https://www.youtube.com/watch?v=0WijjN0LiZ4)
 to incorporate "bitemporal" timestamps in differential dataflow.
 This effectively extends the definition of a timestamp
-into multiple dimensions, as a (read-time, user-time) tuple.
-I don't believe this fundamentally changes the tl;dr.
+into multiple dimensions, as a (read-time, event-time) tuple.
+I don't believe this
+[fundamentally changes](https://news.ycombinator.com/item?id=26862051)
+the tl;dr though.
+
+_This section may have come off as a bit biased,
+and I'm sorry: that's really not my intent.
+Materialize's consistency guarantees are legitimately very cool,
+but are also a place where the product marketing has perhaps run
+ahead of the actual technical guarantees being made._
 
 ## Better Together?
 
-Materialize appears a very powerful tool that I wouldn't hesitate to
-spike out for internal analysis and reporting use cases.
+I wouldn't hesitate to try Materialize for spiking out an internal
+analysis or reporting use case.
 The ability to express complex reactive joins and aggregations
-as SQL is awesome for many a use cases
-(if not _every_ use case).
+as SQL is awesome for many a use cases, if not _every_ use case.
 It's a high leverage tool that could be handed to a team
 of data analysts to have them up and running quickly.
 
-(Aside: Though I'd be a bit concerned regarding unbounded
+(Aside: I'd be a wee bit concerned regarding unbounded
 growth of internal indexes,
-and whether analyst user cohorts _really_ understand
-the operational overheads of their queries).
+and whether analyst user cohorts really understand
+the operational overheads of their queries,
+but this is a solve-able problem with good tooling and documentation).
 
-It's not a system of record, and it's not trying to be.
+Materialize isn't a system of record, and it's not trying to be.
 You'll need to bring your own,
 and on startup the database will need to replay that history
 to rebuild its internal states and views.
 
-It's also not clear to me you should consider Materialize for
+That means assembling a mish-mash of
+[volatile Kenesis](https://materialize.com/docs/sql/create-source/json-kinesis/)
+and overlapping
+[S3](https://materialize.com/docs/sql/create-source/json-s3/)
+sources that you then de-duplicate at query time.
+Or starting a product onboarding conversation with
+"As step one, you must deploy and manage a Kafka cluster".
+
+It's also not clear that Materialize is comfortable tackling
 problems that can't comfortably fit in RAM on a big machine.
 It's technique of
 [index arrangements](https://github.com/frankmcsherry/blog/blob/master/posts/2020-11-18.md)
 is clever and efficient
 *so long as* you can access that index through shared memory,
 rather than exchanging big chunks of it over the network.
+So you'll probably want more than one Materialize deployment,
+where each is focused on different aspects of your business,
+or is owned by a different team.
 
-So, you may eventually want more than one Materialize instance,
-where each is focused on different sub-aspects of your operations.
-You'll need a system of record which can orchestrate and "feed"
-those instances with the correct datasets, with low latency.
-Ideally one which has a baked-in notion of
-event time which could tightly integrate with that of Materialize.
+See where I'm going?
 
-That... sounds a lot like Flow?
+The relative weaknesses of Materialize
+are strengths of Flow, and vice versa.
+Materialize has a powerful transformation capability
+that's simple and appealing,
+but it needs an easy and low-latency system of record
+that can provide reliable replay of events and their timestamps.
+That's Flow.
+As a bonus, I _believe_ Flow could provide metadata about those
+event timestamps that Materialize could use for its own
+consistency guarantees.
+
+Flow's strengths lie in giving you easy tools to integrate
+multiple systems into a comprehensive whole,
+unified around common data sets,
+with data moving between those systems as quickly as possible.
 
 ## Epilogue (for now)
 
