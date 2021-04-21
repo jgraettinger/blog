@@ -19,7 +19,7 @@ of _"what happened?"_ within your event-oriented applications,
 products and services.
 You should consider Flow for _integrating_ those applications,
 products and services.
-In the future, my hope for Flow is that it makes it a lot easier to
+My sincere hope for Flow is that it makes it easy to
 get up and running with new tools like Materialize.
 
 Let's get into it.
@@ -97,7 +97,10 @@ Materialize will do this for you under the hood without
 your having to think too hard about it.
 This is legitimately *very cool*.
 
-Flow has lower-level primitives, **derivations** and their **registers**.
+Flow has lower-level primitives:
+[derivations](https://docs.estuary.dev/concepts/catalog-entities/derivations),
+registers, and schema
+[reduction annotations](https://docs.estuary.dev/concepts/catalog-entities/schemas-and-data-reductions#reduction-annotations).
 They're building blocks for assembling stateful,
 continuous map/reduce workflows,
 including cyclic computations over generalized graphs.
@@ -108,7 +111,7 @@ Still, there are reasons you might want this:
 one is that they allow for **general computation**.
 You can bring your own codebase and Flow will run it using V8
 and (soon) WebAssembly.
-Or Flow can call a lambda that you host.
+Or Flow can call a remote function that you provide.
 
 Another is that derivations are **easy to evolve**.
 You have the ability to fix a bug, change behavior,
@@ -348,12 +351,12 @@ sources that you then de-duplicate at query time.
 Or starting a product onboarding conversation with
 "As step one, you must deploy and manage a Kafka cluster".
 
-It's also not clear that Materialize is comfortable tackling
+It's also not clear that Materialize is happy tackling
 problems that can't comfortably fit in RAM on a big machine.
 It's technique of
 [index arrangements](https://github.com/frankmcsherry/blog/blob/master/posts/2020-11-18.md)
 is clever and efficient
-*so long as* you can access that index through shared memory,
+*so long as* you can access that index through memory,
 rather than exchanging big chunks of it over the network.
 So you'll probably want more than one Materialize deployment,
 where each is focused on different aspects of your business,
@@ -368,9 +371,9 @@ that's simple and appealing,
 but it needs an easy and low-latency system of record
 that can provide reliable replay of events and their timestamps.
 That's Flow.
-As a bonus, I _believe_ Flow could provide metadata about those
+(As a bonus, I _believe_ Flow could provide metadata about those
 event timestamps that Materialize could use for its own
-consistency guarantees.
+consistency guarantees).
 
 Flow's strengths lie in giving you easy tools to integrate
 multiple systems into a comprehensive whole,
