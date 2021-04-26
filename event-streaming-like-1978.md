@@ -40,8 +40,7 @@ for transfer in jsonlines.Reader(sys.stdin, loads=orjson.loads):
 
 Vanilla Python.
 I know, right?
-Not known for being the most performant of languages,
-what with that _dratted GIL_ and all.
+Not known for being the most performant of languages.
 
 Just for fun, let's work up a quick benchmark and...
 
@@ -57,10 +56,10 @@ $ python3
 519049.1020450535
 ```
 
-... 🤯 !!#$ _what_??
+... 🤯 _what_??
 
 _This thing is pushing **half a million** transactions per second_.
-On a single freaking core.
+On a single core.
 
 Just for context,
 the _entire VISA network_ supports
@@ -97,7 +96,7 @@ modern pub/sub systems look an awful lot like Unix pipes.
 Could we plug regular programs in between,
 consuming from and feeding back into those pipes?
 
-I'm by no means the first to point out that this seems like a good idea.
+I'm not the first to point out that this seems like a good idea.
 [Martin Kleppman](https://www.oreilly.com/library/view/making-sense-of/9781492042563/ch04.html)
 has been preaching this gospel for years.
 But aside from the most simplistic of use cases,
@@ -106,11 +105,12 @@ But aside from the most simplistic of use cases,
 ## It's 2021 and You Still Can't Have This
 
 The `balances` dictionary in our program is a really pesky bugger.
-Let's simplify for the moment and assume we don't need it:
+I'll get into why later.
+For now let's simplify and assume we don't need it:
 that each output of our program is a pure function of its input.
 
 Then you can _sort of_ apply the Unix philosophy by wiring up
-AWS Kenesis or Kafka to pipe inputs and outputs of an AWS Lambda.
+Kinesis or Kafka to pipe inputs and outputs of an AWS Lambda.
 I offer this approach because it's apparently
 [a real thing](https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html)
 that 
@@ -125,7 +125,7 @@ Just for the Lambda execution.
 
 Okay, we probably don't want that.
 Which means we're now pushed into the warm,
-all encompassing embrace of the big league
+all encompassing embrace of the
 Stream Processing Frameworks:
 [Spark](https://spark.apache.org/docs/latest/streaming-programming-guide.html),
 [Flink](https://flink.apache.org/),
@@ -197,11 +197,11 @@ Another consideration in all this is scale-out of your
 streaming operator.
 I'll side-step this subject for now with just a couple of observation:
 * The Unix philosophy isn't incompatible with scale-out.
-* We're doing a poor job of utilizing the resources we already have before reaching for "scale out".
+* We could better utilize the resources we already have before reaching for "scale out".
 
 ## Streaming Frameworks
 
-I challenge you to pick a framework,
+Pick a framework,
 like [Flink's](https://flink.apache.org/),
 and map our program into it.
 
@@ -218,19 +218,22 @@ The framework needs to know about it,
 needs to track it,
 and must produce recoverable checkpoints which include it.
 
-And that's the core of it:
+And that's the core issue:
 streaming frameworks ask that we adapt _our_ programs
 to the realities of _their_ execution model.
 
-Unfortunately they ask that we throw out the Unix philosophy along the way:
+Unfortunately they ask that we throw out the
+Unix Philosophy along the way:
 
 > Write programs that do one thing and do it well. 
 
-Instead we write a few lines of core logic wrapped in many more of boilerplate,
-with a state store interface that we didn't ask for
+Instead we write a few lines of core logic
+wrapped in many more of boilerplate,
+with an awkward state store interface
 in place of a Python dictionary,
 with hard-coded input and output sources & sinks,
-and baked in expectations of how it's deployed (YARN).
+and specific expectations of how the application
+is deployed and scaled.
 
 > Write programs to work together.
 
@@ -248,15 +251,15 @@ severely limits your practical flexibility.
 
 Sadly, no.
 
-And we should really want this.
-Aside from the sheer convenience,
-it makes it possible to _test_ unmodified programs in a way
-that's totally decoupled from their implementation.
-Spin them up, throw input at them, and observe their outputs.
+And we should _really_ want this.
+Aside from the practical convenience,
+it makes it possible to **test** unmodified programs
+without knowing anything of their implementation.
+Spin them up, throw inputs at them, and observe their outputs.
 
 ## Fixing the Fault Model
 
-I'm very thankful for what we, as an industry,
+I'm thankful for what we, as an industry,
 have been able to build and learn
 from the streaming frameworks that we have.
 
@@ -276,7 +279,7 @@ or `jq` command,
 or just about anything else
 and run it in a _plugable_ way.
 
-It would decouple the choice of processing implementation
-from the details of parallel processing and fault recovery.
+It would decouple the choice of dataflow implementation
+from the details of sources, sinks, and fault recovery.
 
-I believe it's possible. We're going to find out.
+I believe it's possible. I'd like to find out.
