@@ -39,7 +39,7 @@ for transfer in jsonlines.Reader(sys.stdin, loads=orjson.loads):
 ```
 
 Vanilla Python.
-Weird, right?
+I know, right?
 Not known for being the most performant of languages,
 what with that _dratted GIL_ and all.
 
@@ -57,7 +57,7 @@ $ python3
 519049.1020450535
 ```
 
-... 🤯 what !!#$??
+... 🤯 !!#$ _what_??
 
 _This thing is pushing **half a million** transactions per second_.
 On a single freaking core.
@@ -86,13 +86,14 @@ invention of pipes for wiring programs together _back in 1964_.
 > This is the Unix philosophy: Write programs that do one thing and do it well. Write programs to work together. Write programs to handle text streams, because that is a universal interface. - Doug McIlroy
 
 In 2021, this philosophy is still wildly successful.
-We apply it _daily_ with every launched terminal
+We apply it daily with every launched terminal
 and command-line invocation.
 It's fundamental.
 
 _We should want to build production dataflows in the same way._
 
-If you squint a bit, modern pub/sub systems look an awful lot like Unix pipes.
+If you squint a bit,
+modern pub/sub systems look an awful lot like Unix pipes.
 Could we plug regular programs in between,
 consuming from and feeding back into those pipes?
 
@@ -102,7 +103,7 @@ has been preaching this gospel for years.
 But aside from the most simplistic of use cases,
 **you just can't**.
 
-## Why You Can't Have This (Today)
+## It's 2021 and You Still Can't Have This
 
 The `balances` dictionary in our program is a really pesky bugger.
 Let's simplify for the moment and assume we don't need it:
@@ -132,11 +133,11 @@ Stream Processing Frameworks:
 [Gazette Consumers](https://gazette.readthedocs.io/en/latest/consumers-concepts.html),
 and still others.
 
-Before getting into that, let's break down the execution model
+Before getting into that, let's break down the assumptions
 of our program to inform why "Stream Processing Frameworks"
 are even a thing.
 
-## On Execution Models
+## Flaws in the Fault Model
 
 Our program has a few expectations which are incompatible
 with modern stream processing:
@@ -147,7 +148,7 @@ We're reading from `stdin`.
 There's only one of them,
 and it provides an ordered sequence of inputs.
 
-_But_ in reality we may want to transform from multiple
+_Reality_: we may want to transform from multiple
 Kenesis or Kafka topics,
 each having multiple physical partitions representing a
 distinct sequence of inputs.
@@ -157,7 +158,7 @@ distinct sequence of inputs.
 We expect to read each input exactly-once,
 and we assume the input stream can never fail.
 
-_But_ streaming systems are typically at-least once -
+_Reality_: streaming systems are typically at-least once -
 meaning we could see a message more than one time -
 and they fail all the time.
 
@@ -172,9 +173,10 @@ We can start the program over again,
 this time with more inputs tacked onto the end,
 and we'll get the same results. 
 
-_But_ streaming systems aren't deterministic when
+_Reality_: input orders are unpredictable when
 reading across topics and partitions.
-Inputs will arrive in unpredictable orders.
+Systems are typically also _buffers_ and don't 
+retain the full history of the stream.
 
 **Runs Forever:**
 
@@ -184,11 +186,9 @@ It would happily track account balances
 and make transfer decisions for as long
 as you care to feed it input.
 
-_But_ machines fail all the time, at any time.
-I mentioned that `balances` is pesky:
-it's an internal state that depends on the _entire_
-input sequence.
-We can't just pick up where we left off.
+_Reality_: machines fail all the time, at any time.
+But we can't just pick up where we left off,
+because `balances` depends on the _entire_ input sequence.
 We need continuity of the process lifetime.
 
 ---
@@ -197,7 +197,7 @@ Another consideration in all this is scale-out of your
 streaming operator.
 I'll side-step this subject for now with just a couple of observation:
 * The Unix philosophy isn't incompatible with scale-out.
-* We're doing a poor job of utilizing the resources we _have_ before reaching for "scale out".
+* We're doing a poor job of utilizing the resources we already have before reaching for "scale out".
 
 ## Streaming Frameworks
 
@@ -216,19 +216,19 @@ it's a state variable that's tightly bound to
 the specific inputs and outputs processed by the program.
 The framework needs to know about it,
 needs to track it,
-and produces recoverable checkpoints which include it.
+and must produce recoverable checkpoints which include it.
 
 And that's the core of it:
-_streaming frameworks ask that we adapt our programs
-to the realities of their execution model_.
+streaming frameworks ask that we adapt _our_ programs
+to the realities of _their_ execution model.
 
 Unfortunately they ask that we throw out the Unix philosophy along the way:
 
 > Write programs that do one thing and do it well. 
 
 Instead we write a few lines of core logic wrapped in many more of boilerplate,
-with a state store interface (that we didn't ask for)
-in place of a python dictionary,
+with a state store interface that we didn't ask for
+in place of a Python dictionary,
 with hard-coded input and output sources & sinks,
 and baked in expectations of how it's deployed (YARN).
 
@@ -258,14 +258,26 @@ Spin them up, throw input at them, and observe their outputs.
 
 I'm very thankful for what we, as an industry,
 have been able to build and learn
-from the stable of streaming frameworks that we have.
+from the streaming frameworks that we have.
 
-But I think it's time to try something else.
+But I think it's time to try something.
 
-As I said, streaming frameworks ask that we adapt our
-programs to the realities of their fault model.
+As I said, streaming frameworks ask that we adapt _our_
+programs to the realities of _their_ fault model.
 
 The question I want to answer is:
-_how can we build an execution environment
-that serves the expectations of Unix philosophy programs?_
-I believe it's possible, and we're working on it.
+how can we build an execution environment
+that meets the expectations of Unix Philosophy programs?
+
+That would let you take **any** program:
+our python program,
+or a Spark or Flink SQL query,
+or Differential Dataflow,
+or `jq` command,
+or just about anything else
+and run it in a _plugable_ way.
+
+It would decouple the choice of processing implementation
+from the details of parallel processing and fault recovery.
+
+I believe it's possible. We're going to find out.
