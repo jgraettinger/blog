@@ -261,7 +261,6 @@ have been able to build and learn
 from the streaming frameworks that we have.
 
 But I think it's time to try something.
-
 As I said, streaming frameworks ask that we adapt _our_
 programs to the realities of _their_ fault model.
 
