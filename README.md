@@ -11,3 +11,4 @@ on which Flow is built.
 Posts:
 - [Filling a Paradigm-Shaped Hole](./filling-paradigm-shaped-hole/README.md)
 - [Comparing Flow and Materialize](./compare-flow-and-materialize.md)
+- [Event Streaming like it's 1978](./event-streaming-like-1978.md)
