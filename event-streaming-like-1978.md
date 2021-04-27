@@ -64,6 +64,9 @@ On a single core.
 Just for context,
 the _entire VISA network_ supports
 [~25K peak transactions per second](https://www.reddit.com/r/nanocurrency/comments/82438o/visa_is_capable_of_performing_24000_transactions/).
+Clearly twenty lines of Python doesn't make a Fortune 500 company,
+but my point is simply that concise expressions of
+business transaction logic can be really, _really_ fast.
 
 Read JSON from standard input.
 Update some memory.
@@ -104,28 +107,45 @@ But aside from the most simplistic of use cases,
 
 ## It's 2021 and You Still Can't Have This
 
-The `balances` dictionary in our program is a really pesky bugger.
-I'll get into why later.
-For now let's simplify and assume we don't need it:
-that each output of our program is a pure function of its input.
-
 Then you can _sort of_ apply the Unix philosophy by wiring up
 Kinesis or Kafka to pipe inputs and outputs of an AWS Lambda.
-I offer this approach because it's apparently
-[a real thing](https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis.html)
-that 
-[people do](https://docs.confluent.io/kafka-connect-aws-lambda/current/index.html).
-A bit of napkin math:
-we saw ~500K QPS with our program on one core.
-At
-[Lambda's pricing](https://aws.amazon.com/lambda/pricing/)
-of $0.20 per 1M requests that comes to... 
-_**$260K a month**_.
-Just for the Lambda execution.
 
-Okay, we probably don't want that.
-Which means we're now pushed into the warm,
-all encompassing embrace of the
+It has a bunch of caveats:
+inputs may be mis-ordered or repeated,
+making re-ordering and de-dup something
+your application must handle.
+You're responsible for updating outputs into your systems -
+like database or key/value stores -
+where those representations should live.
+You will encounter scaling and correctness challenges due to
+[data skews](https://dataengi.com/2019/02/06/spark-data-skew-problem/),
+[write skews](https://en.wikipedia.org/wiki/Snapshot_isolation),
+and per-event network latencies.
+
+It's an **awful lot of coupling** between a few lines of business logic,
+and all of the other runtime concerns required to serve
+an application of this kind.
+
+And of course, it can't support persistent in-memory states!
+Our `balances` dictionary must be externalized
+into a transactional store,
+which will _clobber_ processing throughput.
+
+Again, what you should _want_ to do is:
+
+1) Deploy an _unmodified_ instance of our python app.
+2) Connect it to a data source of transfer requests.
+3) Connect its output into another app, or to a database, or both.
+
+_How_ transfer requests are captured,
+or results are materialized,
+is something we'd rather not have to think about in the app itself.
+Hopefully a runtime
+[like this one](https://github.com/estuary/flow)
+could handle those pesky details in a flexible way.
+
+But we just can't do this today.
+Our next best option is to embrace one of the
 Stream Processing Frameworks:
 [Spark](https://spark.apache.org/docs/latest/streaming-programming-guide.html),
 [Flink](https://flink.apache.org/),
@@ -149,9 +169,8 @@ There's only one of them,
 and it provides an ordered sequence of inputs.
 
 _Reality_: we may want to transform from multiple
-Kenesis or Kafka topics,
-each having multiple physical partitions representing a
-distinct sequence of inputs.
+distinct sequences of inputs,
+like Kenesis or Kafka topics and partitions.
 
 **Reliable input:**
 
@@ -211,7 +230,7 @@ The framework throws a lot of concepts at you,
 like state stores, checkpoints, and watermarks.
 
 It's not even because they're jerks.
-I've said that `balances` is pesky:
+I've said that `balances` is a challenge:
 it's a state variable that's tightly bound to
 the specific inputs and outputs processed by the program.
 The framework needs to know about it,
@@ -270,8 +289,20 @@ programs to the realities of _their_ fault model.
 The question I want to answer is:
 how can we build an execution environment
 that meets the expectations of Unix Philosophy programs?
+The problems of check-points,
+internal states, sources, sinks, multiplexing, latency,
+and crash recovery don't magically go away, of course.
+But perhaps the runtime could provide an environment
+that hides those details.
 
-That would let you take **any** program:
+It could, for example,
+take incremental snapshots _of the entire program_
+within its checkpoints,
+giving our python script the **illusion** that it's
+one long-running script when in actuality
+it's handed off between physical machines over time.
+
+That would let you take *any* program:
 our python program,
 or a Spark or Flink SQL query,
 or Differential Dataflow,
@@ -279,7 +310,9 @@ or `jq` command,
 or just about anything else
 and run it in a _plugable_ way.
 
-It would decouple the choice of dataflow implementation
-from the details of sources, sinks, and fault recovery.
+It would decouple the choice of dataflow implementation -
+and the expression of our business logic -
+from the gory details of how streaming systems need
+to work in practice.
 
 I believe it's possible. I'd like to find out.
