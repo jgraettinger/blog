@@ -107,10 +107,10 @@ But aside from the most simplistic of use cases,
 
 ## It's 2021 and You Still Can't Have This
 
-Then you can _sort of_ apply the Unix philosophy by wiring up
+Well, you can _sort of_ apply the Unix philosophy by wiring up
 Kinesis or Kafka to pipe inputs and outputs of an AWS Lambda.
 
-It has a bunch of caveats:
+It has major caveats:
 inputs may be mis-ordered or repeated,
 making re-ordering and de-dup something
 your application must handle.
@@ -127,25 +127,25 @@ and all of the other runtime concerns required to serve
 an application of this kind.
 
 And of course, it can't support persistent in-memory states!
-Our `balances` dictionary must be externalized
-into a transactional store,
+An internal state like the `balances` dictionary must
+be externalized into a transactional store,
 which will _clobber_ processing throughput.
 
-Again, what you should _want_ to do is:
+Again, what you _want_ to do is:
 
-1) Deploy an _unmodified_ instance of our python app.
+1) Deploy an _unmodified_ instance of the Python app.
 2) Connect it to a data source of transfer requests.
 3) Connect its output into another app, or to a database, or both.
 
-_How_ transfer requests are captured,
-or results are materialized,
-is something we'd rather not have to think about in the app itself.
+_How_ transfer requests are piped in,
+or how its results are persisted somewhere,
+is something you'd rather not have to think about in the app itself.
 Hopefully a runtime
 [like this one](https://github.com/estuary/flow)
-could handle those pesky details in a flexible way.
+could handle those details in a flexible way.
 
-But we just can't do this today.
-Our next best option is to embrace one of the
+But you can't do this today.
+Your next best option is to embrace one of the
 Stream Processing Frameworks:
 [Spark](https://spark.apache.org/docs/latest/streaming-programming-guide.html),
 [Flink](https://flink.apache.org/),
@@ -216,7 +216,7 @@ Another consideration in all this is scale-out of your
 streaming operator.
 I'll side-step this subject for now with just a couple of observation:
 * The Unix philosophy isn't incompatible with scale-out.
-* We could better utilize the resources we already have before reaching for "scale out".
+* We could better utilize the resources we have before reaching for parallelism.
 
 ## Streaming Frameworks
 
@@ -293,7 +293,7 @@ The problems of check-points,
 internal states, sources, sinks, multiplexing, latency,
 and crash recovery don't magically go away, of course.
 But perhaps the runtime could provide an environment
-that hides those details.
+that encapsulates those details.
 
 It could, for example,
 take incremental snapshots _of the entire program_
