@@ -1,8 +1,12 @@
 # Event Streaming Like it's 1978
 
-Imagine you're a bank. You have a bunch of accounts.
-Those accounts want to transfer money with each other,
-and to a special "sweep" account for bank deposits and withdrawals. 
+Imagine your users have accounts with something that they trade.
+Maybe an in-game currency,
+or Reddit coins,
+or dollars,
+or digital kittens.
+Whatever.
+There's also a special "sweep" account for deposits and withdrawals.
 Transfers happen all the time, and you want to quickly figure out
 if the sender has sufficient funds for the transfer to go through.
 And of course once you approve a transfer,
@@ -62,7 +66,7 @@ _This thing is pushing **half a million** transactions per second_.
 On a single core.
 
 Just for context,
-the _entire VISA network_ supports
+the entire VISA network supports
 [~25K peak transactions per second](https://www.reddit.com/r/nanocurrency/comments/82438o/visa_is_capable_of_performing_24000_transactions/).
 Clearly twenty lines of Python doesn't make a Fortune 500 company,
 but my point is simply that concise expressions of
@@ -131,7 +135,7 @@ An internal state like the `balances` dictionary must
 be externalized into a transactional store,
 which will _clobber_ processing throughput.
 
-Again, what you _want_ to do is:
+Again, what you want to do is:
 
 1) Deploy an _unmodified_ instance of the Python app.
 2) Connect it to a data source of transfer requests.
@@ -148,10 +152,11 @@ But you can't do this today.
 Your next best option is to embrace one of the
 Stream Processing Frameworks:
 [Spark](https://spark.apache.org/docs/latest/streaming-programming-guide.html),
-[Flink](https://flink.apache.org/),
-[Kafka Streams](https://kafka.apache.org/documentation/streams/),
-[Gazette Consumers](https://gazette.readthedocs.io/en/latest/consumers-concepts.html),
-and still others.
+or [Flink](https://flink.apache.org/),
+or [Kafka Streams](https://kafka.apache.org/documentation/streams/),
+or still others.
+I've written one myself with
+[Gazette Consumers](https://gazette.readthedocs.io/en/latest/consumers-concepts.html).
 
 Before getting into that, let's break down the assumptions
 of our program to inform why "Stream Processing Frameworks"
@@ -287,7 +292,7 @@ As I said, streaming frameworks ask that we adapt _our_
 programs to the realities of _their_ fault model.
 
 The question I want to answer is:
-how can we build an execution environment
+how can we build a runtime environment
 that meets the expectations of Unix Philosophy programs?
 The problems of check-points,
 internal states, sources, sinks, multiplexing, latency,
